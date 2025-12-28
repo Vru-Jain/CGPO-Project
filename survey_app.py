@@ -12,14 +12,15 @@ st.set_page_config(page_title="CGPO Research Survey", page_icon="📈")
 st.title("📈 Cognitive Graph Portfolio Optimizer (CGPO)")
 st.subheader("Field Validation Survey")
 st.markdown("""
-**Introduction:**
-We are final-year students developing a decision-support system that uses AI to optimize financial portfolios. 
+**Sole Developer:** Vrushabh (Roll No: **25KCTYCS23**)  
+**Institution:** KC College  
+
+**Project Overview:** I am a final-year student developing a decision-support system that uses AI to optimize financial portfolios. 
 It combines analysis of **text and audio** (earnings calls) with a **graph-based view** of asset interdependencies. 
-Your feedback is critical for validating our research requirements.
+Your feedback is critical for validating my research requirements.
 """)
 
 st.divider()
-
 # --- Form Logic ---
 with st.form("research_survey_form"):
     
