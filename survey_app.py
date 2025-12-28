@@ -3,6 +3,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
+import json  # <--- NEW IMPORT
 
 # --- CONFIGURATION ---
 GOOGLE_SHEET_NAME = "CGPO_Survey_Data"
@@ -43,14 +44,31 @@ with st.container():
     )
 st.divider()
 
-# --- GOOGLE SHEETS CONNECTION ---
+# --- SMARTER GOOGLE SHEETS CONNECTION ---
 def get_sheet():
-    if not os.path.exists(KEY_FILE):
-        st.error(f"❌ Critical Error: '{KEY_FILE}' not found. Please move the JSON key into this folder.")
-        st.stop()
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    
+    # METHOD 1: Try to load from Streamlit Cloud Secrets (Best for Deployment)
+    if "gcp_service_account" in st.secrets:
+        try:
+            # We parse the text you pasted in Secrets back into a dictionary
+            creds_dict = json.loads(st.secrets["gcp_service_account"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        except Exception as e:
+            st.error(f"❌ Secrets Error: {e}")
+            st.stop()
+            
+    # METHOD 2: Try to load from Local File (Best for Localhost/Laptop)
+    elif os.path.exists(KEY_FILE):
         creds = ServiceAccountCredentials.from_json_keyfile_name(KEY_FILE, scope)
+        
+    # FAILURE: Neither method worked
+    else:
+        st.error("❌ Critical Error: credentials not found in Secrets or Local File.")
+        st.stop()
+
+    # Connect to the Sheet
+    try:
         client = gspread.authorize(creds)
         return client.open(GOOGLE_SHEET_NAME).sheet1
     except Exception as e:
@@ -109,7 +127,6 @@ with st.form("research_form"):
         help="0 = Useless, 10 = Critical."
     )
     
-    # NEW QUESTION: Validates Feature Engineering
     st.write("")
     audio_cue = st.selectbox(
         "**Which vocal cue signals the highest risk to you?**",
@@ -140,7 +157,6 @@ with st.form("research_form"):
             ["Real-time (Immediate)", "End of Day Report", "Weekly Report"]
         )
     with col4:
-        # NEW QUESTION: Validates "Out of Scope" (Manual vs Auto)
         ai_autonomy = st.selectbox(
             "Would you trust AI to auto-trade your money?",
             ["No, I want final approval (Decision Support)", "Yes, fully automated (Black Box)"]
@@ -160,7 +176,7 @@ if submitted:
         sheet = get_sheet()
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Prepare the row of data (Matches the headers from Step 1)
+        # Prepare the row of data
         row_data = [
             timestamp, 
             name, 
@@ -169,10 +185,10 @@ if submitted:
             missing_info, 
             complexity_pain, 
             audio_trust, 
-            audio_cue,      # <--- New
+            audio_cue, 
             vis_preference, 
             update_freq, 
-            ai_autonomy,    # <--- New
+            ai_autonomy, 
             open_feedback
         ]
         
