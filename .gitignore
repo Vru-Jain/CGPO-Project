@@ -1,0 +1,12 @@
+# --- SECRETS (NEVER UPLOAD) ---
+service_account.json
+secrets.toml
+.env
+
+# --- DATA (PRIVACY) ---
+*.csv
+*.xlsx
+
+# --- PYTHON JUNK ---
+__pycache__/
+*.pyc
