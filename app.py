@@ -1,261 +1,287 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
+from streamlit_agraph import agraph, Node, Edge, Config
 import random
-import time
 from datetime import datetime
+from typing import List, Tuple, Dict, Any
 
-# --- Page Config ---
-st.set_page_config(
-    page_title="CGPO Terminal",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+# --- CONFIGURATION & CONSTANTS ---
+PAGE_TITLE = "CGPO Terminal"
+LAYOUT = "wide"
 
-# --- Constants & Theme ---
-COLOR_BG = "#050505"
-COLOR_TEXT_MAIN = "#FF9900"  # Amber/Orange
-COLOR_TEXT_SEC = "#00FFFF"   # Cyan
-COLOR_RISK = "#CC3333"       # Muted Red
-COLOR_BORDER = "#333333"
-FONT_MONO = '"Courier New", Courier, monospace'
+# Palette: Deep Space Theme
+THEME = {
+    "bg": "#050505",
+    "card_bg": "#0A0A0A",
+    "primary": "#FF9900",  # Amber
+    "secondary": "#00F0FF", # Cyber Cyan
+    "danger": "#FF3333",    # Alert Red
+    "success": "#33FF57",   # Terminal Green
+    "border": "#222222",
+    "text_dim": "#888888",
+    "font_mono": '"IBM Plex Mono", "Roboto Mono", "Courier New", monospace'
+}
 
-# --- CSS Injection ---
-def inject_custom_css():
+CUSTOM_CSS = f"""
+    <style>
+        /* --- RESET & BASICS --- */
+        .stApp {{ background-color: {THEME['bg']}; }}
+        html, body, [class*="css"] {{ font-family: {THEME['font_mono']}; color: #E0E0E0; }}
+        
+        /* Remove Streamlit Defaults */
+        header[data-testid="stHeader"], footer, #MainMenu {{ visibility: hidden; display: none; }}
+        
+        /* --- TYPOGRAPHY --- */
+        h1, h2, h3 {{ text-transform: uppercase; letter-spacing: 2px; font-weight: 600; margin-bottom: 0.5rem; }}
+        h1 {{ color: {THEME['primary']}; font-size: 1.8rem; margin-top: -1rem; }}
+        h3 {{ color: {THEME['secondary']}; font-size: 1.1rem; border-bottom: 1px solid {THEME['border']}; padding-bottom: 5px; }}
+        
+        /* --- NEO-CONTAINERS --- */
+        .neo-card {{
+            background-color: {THEME['card_bg']};
+            border: 1px solid {THEME['border']};
+            border-radius: 4px;
+            padding: 15px;
+            height: 100%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: border-color 0.3s ease;
+        }}
+        .neo-card:hover {{ border-color: #444; }}
+        
+        /* --- COMPONENT STYLES --- */
+        .feed-item {{
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 2px solid {THEME['border']};
+            padding: 10px; margin-bottom: 8px;
+        }}
+        .feed-item:hover {{
+            border-left-color: {THEME['primary']};
+            background: rgba(255, 255, 255, 0.05);
+        }}
+        
+        .log-entry {{
+            font-size: 0.85rem; padding: 4px 0;
+            border-bottom: 1px solid #111;
+            display: flex; justify-content: space-between;
+        }}
+        .log-entry:last-child {{ border-bottom: none; }}
+        
+        .badge {{
+            padding: 2px 6px; border-radius: 3px;
+            font-size: 0.7rem; font-weight: bold; text-transform: uppercase;
+        }}
+        .badge-buy {{ background: rgba(51, 255, 87, 0.1); color: {THEME['success']}; border: 1px solid {THEME['success']}; }}
+        .badge-sell {{ background: rgba(255, 51, 51, 0.1); color: {THEME['danger']}; border: 1px solid {THEME['danger']}; }}
+        .badge-neu {{ background: rgba(255, 255, 255, 0.1); color: #FFF; border: 1px solid #555; }}
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar {{ width: 6px; }}
+        ::-webkit-scrollbar-track {{ background: {THEME['bg']}; }}
+        ::-webkit-scrollbar-thumb {{ background: #333; border-radius: 3px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {THEME['primary']}; }}
+    </style>
+"""
+
+# --- SETUP FUNCTIONS ---
+
+def setup_page():
+    """Initializes standard Streamlit page settings."""
+    st.set_page_config(page_title=PAGE_TITLE, layout=LAYOUT, initial_sidebar_state="collapsed")
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+# --- DATA SERVICE LAYER ---
+# In a real app, this would fetch from an API or Database.
+
+def get_graph_data() -> Tuple[List[Node], List[Edge]]:
+    """
+    Generates nodes and edges for the Systemic Risk Map.
+    
+    Returns:
+        Tuple[List[Node], List[Edge]]: The graph elements for streamlit-agraph.
+    """
+    nodes = []
+    edges = []
+    tickers = ["AAPL", "NVDA", "MSFT", "GOOG", "AMZN", "TSLA", "META", "AMD", "QCOM", "INTC"]
+    
+    for i, ticker in enumerate(tickers):
+        # Simulate criticality via size
+        size = random.randint(15, 30)
+        # Simulate risk level
+        risk_score = random.random()
+        
+        # Determine Color based on Risk
+        if risk_score > 0.8:
+            color = THEME['danger']
+        elif risk_score < 0.4:
+            color = THEME['secondary']
+        else:
+            color = "#DDDDDD"
+            
+        nodes.append(Node(
+            id=ticker, 
+            label=ticker, 
+            size=size, 
+            color=color, 
+            font={'color': 'white', 'face': 'Courier New'}
+        ))
+    
+    # Generate random edges to simulate market correlations
+    for i in range(len(tickers)):
+        for j in range(i + 1, len(tickers)):
+            if random.random() > 0.7:  # 30% connectivity
+                edges.append(Edge(
+                    source=tickers[i], 
+                    target=tickers[j], 
+                    color=THEME['text_dim'], 
+                    strokeWidth=1, 
+                    type="straight"
+                ))
+                
+    return nodes, edges
+
+def get_feed_data() -> List[Dict[str, str]]:
+    """Fetches the latest mock multimodal signals."""
+    return [
+        {"ts": "14:05", "src": "EARNINGS", "msg": "NVDA: Data center revenue beats exp by 15%.", "sent": "POS"},
+        {"ts": "13:50", "src": "TRANSCRIPT", "msg": "JPM CEO: 'Storm clouds are clearing'.", "sent": "POS"},
+        {"ts": "13:42", "src": "MACRO", "msg": "FED: Rates likely to remain elevated.", "sent": "NEG"},
+        {"ts": "13:15", "src": "NEWS", "msg": "AAPL: Supply chain disruption in Vietnam.", "sent": "NEG"},
+        {"ts": "12:55", "src": "RUMOR", "msg": "Potential acquisition in Semi sector.", "sent": "NEU"},
+    ]
+
+# --- UI COMPONENT RENDERERS ---
+
+def render_header():
+    """Renders the main dashboard header."""
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        cl1, cl2 = st.columns([0.15, 0.85])
+        with cl1:
+            st.image("assets/logo.png", width=80)
+        with cl2:
+            st.markdown(f"<h1 style='margin-top:5px;'>CGPO // <span style='color:white; font-size:1rem; opacity:0.7;'>COGNITIVE GRAPH PORTFOLIO OPTIMIZER</span></h1>", unsafe_allow_html=True)
+    with c2:
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:{THEME['text_dim']}; padding-top:10px;'>{current_time}</div>", unsafe_allow_html=True)
+    st.write("") # Spacer
+
+
+def render_graph_module():
+    """Renders the interactive Graph Map (Module A)."""
     st.markdown(f"""
-        <style>
-            /* Force Background */
-            .stApp {{
-                background-color: {COLOR_BG};
-            }}
-            
-            /* Global Font Settings */
-            html, body, [class*="css"] {{
-                font-family: {FONT_MONO};
-                color: {COLOR_TEXT_MAIN};
-            }}
-            
-            /* Remove default header/footer/menu */
-            header[data-testid="stHeader"] {{
-                visibility: hidden;
-            }}
-            footer {{
-                visibility: hidden;
-            }}
-            #MainMenu {{
-                visibility: hidden;
-            }}
-            
-            /* Headers */
-            h1, h2, h3, h4, h5, h6 {{
-                color: {COLOR_TEXT_SEC} !important;
-                font-family: {FONT_MONO} !important;
-                font-weight: bold;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-            }}
-
-            /* Container Styling (Bento Grid) */
-            .css-1r6slb0, .css-12oz5g7 {{ /* Try to target containers generally - highly version dependent */
-                border: 1px solid {COLOR_BORDER};
-                padding: 10px;
-                border_radius: 0px;
-            }}
-            
-            /* Streamlit columns often don't have direct borders easily, 
-               so we might wrap content in custom HTML/markdown divs if needed.
-               For now, we'll try to style text areas and metrics. */
-            
-            /* Metrics */
-            [data-testid="stMetricValue"] {{
-                color: {COLOR_TEXT_SEC} !important;
-                font-family: {FONT_MONO} !important;
-            }}
-            [data-testid="stMetricLabel"] {{
-                color: #888888 !important;
-            }}
-            [data-testid="stMetricDelta"] svg {{
-                fill: {COLOR_TEXT_MAIN} !important;
-            }}
-            
-            /* Custom Scrollbars */
-            ::-webkit-scrollbar {{
-                width: 8px;
-                height: 8px;
-            }}
-            ::-webkit-scrollbar-track {{
-                background: {COLOR_BG};
-            }}
-            ::-webkit-scrollbar-thumb {{
-                background: {COLOR_BORDER};
-            }}
-            ::-webkit-scrollbar-thumb:hover {{
-                background: {COLOR_TEXT_MAIN};
-            }}
-
-            /* Custom Container Class */
-            .neo-container {{
-                border: 1px solid {COLOR_BORDER};
-                padding: 1rem;
-                background-color: #0a0a0a;
-                margin-bottom: 1rem;
-                height: 100%;
-            }}
-            
-            .terminal-text {{
-                color: #00FF00; /* Classic Terminal Green */
-            }}
-            
-            .warning-text {{
-                color: {COLOR_TEXT_MAIN};
-            }}
-            
-            .risk-text {{
-                color: {COLOR_RISK};
-            }}
-        </style>
+    <div class="neo-card">
+        <h3>GL-STN SYSTEMIC RISK MAP</h3>
+        <p style="font-size: 0.8rem; color: {THEME['text_dim']}; margin-bottom: 10px;">
+            Dynamic Topology // Real-time Propagation
+        </p>
     """, unsafe_allow_html=True)
+    
+    nodes, edges = get_graph_data()
+    
+    config = Config(
+        width="100%", 
+        height=450, 
+        directed=False, 
+        physics=True, 
+        hierarchical=False,
+        nodeHighlightBehavior=True, 
+        highlightColor=THEME['primary'],
+        collapsible=False,
+        minZoom=0.5, 
+        maxZoom=2.0
+    )
+    
+    # Note: agraph returns a React component
+    agraph(nodes=nodes, edges=edges, config=config)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Mock Data Functions ---
-
-def get_market_graph():
-    # Generate a random graph to simulate market connections
-    G = nx.erdos_renyi_graph(15, 0.2)
-    tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "JPM", "V", "WMT", "PG", "XOM", "BAC", "MA", "HD"]
-    mapping = {i: t for i, t in enumerate(tickers[:15])}
-    G = nx.relabel_nodes(G, mapping)
-    return G
-
-def get_earnings_signals():
-    return [
-        {"time": "14:02", "source": "NVDA Earnings", "text": "AI demand continues to outpace supply...", "sentiment": 0.95, "tone": "Confident"},
-        {"time": "13:45", "source": "JPM Call", "text": "Consumer spending remains resilient but...", "sentiment": 0.15, "tone": "Cautious"},
-        {"time": "13:10", "source": "News Wire", "text": "Fed official hints at rate pause...", "sentiment": 0.60, "tone": "Neutral"},
-        {"time": "12:55", "source": "AAPL Transcript", "text": "Services revenue hit all-time high...", "sentiment": 0.88, "tone": "Optimistic"},
-        {"time": "12:30", "source": "Market Rumor", "text": "Potential merger talks in energy sector...", "sentiment": 0.40, "tone": "Speculative"},
-    ]
-
-def get_agent_logs():
-    return [
-        {"ts": datetime.now().strftime("%H:%M:%S"), "action": "BUY", "asset": "NVDA", "conf": "92%"},
-        {"ts": datetime.now().strftime("%H:%M:%S"), "action": "HOLD", "asset": "AAPL", "conf": "65%"},
-        {"ts": datetime.now().strftime("%H:%M:%S"), "action": "SELL", "asset": "TSLA", "conf": "78%"},
-        {"ts": datetime.now().strftime("%H:%M:%S"), "action": "SCAN", "asset": "MARKET", "conf": "N/A"},
-    ]
-
-# --- Modules ---
-
-def render_module_a_graph():
-    st.markdown("### SYSTEMIC RISK MAP (GL-STN)")
-    st.markdown('<div class="neo-container">', unsafe_allow_html=True)
+def render_feed_module():
+    """Renders the Signal Feed (Module B)."""
+    st.markdown(f"""<div class="neo-card"><h3>MULTIMODAL INTELLIGENCE</h3>""", unsafe_allow_html=True)
     
-    # Use NetworkX + Matplotlib for robust mock visualization without external strict dependencies issues
-    # but style it to look "Neo-Bloomberg"
-    G = get_market_graph()
-    
-    fig, ax = plt.subplots(figsize=(8, 6))
-    fig.patch.set_facecolor(COLOR_BG)
-    ax.set_facecolor(COLOR_BG)
-    
-    pos = nx.spring_layout(G, seed=42)
-    
-    # Draw nodes
-    nx.draw_networkx_nodes(G, pos, node_color=COLOR_BG, edgecolors=COLOR_TEXT_SEC, node_size=1000, linewidths=2, ax=ax)
-    
-    # Draw edges (glowing cyan effect simulated by high opacity/bright color)
-    nx.draw_networkx_edges(G, pos, edge_color=COLOR_TEXT_SEC, alpha=0.6, width=1.5, ax=ax)
-    
-    # Draw labels
-    nx.draw_networkx_labels(G, pos, font_color=COLOR_TEXT_MAIN, font_family="monospace", font_size=10, ax=ax)
-    
-    plt.axis("off")
-    st.pyplot(fig)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-def render_module_b_feed():
-    st.markdown("### MULTIMODAL FEED")
-    with st.container():
-        st.markdown(f'<div class="neo-container" style="height: 500px; overflow-y: auto;">', unsafe_allow_html=True)
+    feed = get_feed_data()
+    for item in feed:
+        badge_cls = "badge-buy" if item['sent'] == "POS" else ("badge-sell" if item['sent'] == "NEG" else "badge-neu")
         
-        signals = get_earnings_signals()
-        for sig in signals:
-            color = "#00FF00" if sig['sentiment'] > 0.5 else COLOR_RISK
-            st.markdown(f"""
-            <div style="border-bottom: 1px dashed #333; padding-bottom: 10px; margin-bottom: 10px;">
-                <span style="color: #666; font-size: 0.8em;">[{sig['time']}] {sig['source']}</span><br/>
-                <span style="color: {COLOR_TEXT_MAIN};">{sig['text']}</span><br/>
-                <span style="color: {color}; font-size: 0.9em;">SENTIMENT: {sig['sentiment']} | TONE: {sig['tone']}</span>
-                <div style="height: 20px; background: linear-gradient(90deg, {COLOR_BG} 0%, {color} 50%, {COLOR_BG} 100%); opacity: 0.5; margin-top: 5px;"></div>
+        st.markdown(f"""
+        <div class="feed-item">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span class="badge {badge_cls}">{item['src']}</span>
+                <span style="color:{THEME['text_dim']}; font-size:0.7rem;">{item['ts']}</span>
             </div>
-            """, unsafe_allow_html=True)
-            
-        st.markdown('</div>', unsafe_allow_html=True)
-
-def render_module_c_log():
-    st.markdown("### AGENT COMMAND LOG")
-    with st.container():
-        st.markdown(f'<div class="neo-container" style="height: 500px; overflow-y: auto; font-family: monospace;">', unsafe_allow_html=True)
+            <div style="font-size:0.85rem; line-height:1.4;">{item['msg']}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        logs = get_agent_logs()
-        for log in logs:
-            action_color = "#00FF00" if log['action'] == "BUY" else (COLOR_RISK if log['action'] == "SELL" else COLOR_TEXT_MAIN)
-            st.markdown(f"""
-            <div style="margin-bottom: 5px;">
-                <span style="color: #444;">[{log['ts']}]</span> 
-                <span style="color: {action_color}; font-weight: bold;">{log['action']}</span> 
-                >> {log['asset']} 
-                >> <span style="color: {COLOR_TEXT_SEC};">CONF: {log['conf']}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-def render_module_d_metrics():
-    st.markdown("### PERFORMANCE BENCHMARKS")
+def render_log_module():
+    """Renders the Agent Action Log (Module C)."""
+    st.markdown(f"""<div class="neo-card"><h3>AGENT COMMAND STREAM</h3>""", unsafe_allow_html=True)
     
-    # Custom HTML metrics to ensure rigid styling
+    actions = [
+        ("BUY", "NVDA", "98%"), ("HOLD", "MSFT", "55%"), 
+        ("SELL", "INTC", "82%"), ("BUY", "AMD", "74%"),
+        ("WAIT", "MKT_SCAN", "---")
+    ]
+    
+    for act, tik, conf in actions:
+        cls = "badge-buy" if act == "BUY" else ("badge-sell" if act == "SELL" else "badge-neu")
+        st.markdown(f"""
+        <div class="log-entry">
+            <span class="badge {cls}" style="width: 50px; text-align:center;">{act}</span>
+            <span style="color: {THEME['secondary']}; font-weight:bold;">{tik}</span>
+            <span style="color: {THEME['text_dim']};">{conf}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    st.markdown("</div>", unsafe_allow_html=True)
+
+def render_metrics_module():
+    """Renders the Bottom KPI Row (Module D)."""
     metrics = [
-        {"label": "SHARPE RATIO", "value": "2.14", "delta": "+0.45", "color": "#00FF00"},
-        {"label": "MAX DRAWDOWN", "value": "-4.2%", "delta": "+1.2% vs SPX", "color": COLOR_RISK},
-        {"label": "TOTAL RETURN", "value": "+18.7%", "delta": "+5.3% YTD", "color": "#00FF00"},
-        {"label": "ALPHA", "value": "1.89", "delta": "High", "color": COLOR_TEXT_SEC},
+        ("SHARPE", "2.45", "+0.12", THEME['success']),
+        ("BETA", "0.85", "-0.05", THEME['secondary']),
+        ("ALPHA", "1.9%", "+0.4%", THEME['success']),
+        ("MAX DD", "-5.2%", "STABLE", THEME['danger']),
     ]
     
     cols = st.columns(4)
-    for i, col in enumerate(cols):
-        m = metrics[i]
-        with col:
+    for i, (label, val, delta, color) in enumerate(metrics):
+        with cols[i]:
             st.markdown(f"""
-            <div style="border: 1px solid {COLOR_BORDER}; padding: 15px; background-color: #0a0a0a;">
-                <div style="color: #666; font-size: 0.8em; letter-spacing: 1px;">{m['label']}</div>
-                <div style="color: {COLOR_TEXT_SEC}; font-size: 1.8em; font-weight: bold;">{m['value']}</div>
-                <div style="color: {m['color']}; font-size: 0.9em;">{m['delta']} ▲</div>
+            <div class="neo-card" style="text-align: center; padding: 10px;">
+                <div style="color: {THEME['text_dim']}; font-size: 0.75rem; letter-spacing: 1px;">{label}</div>
+                <div style="font-size: 2rem; font-weight: bold; color: #FFF; margin: 5px 0;">{val}</div>
+                <div style="color: {color}; font-size: 0.9rem; font-weight: bold;">{delta}</div>
             </div>
             """, unsafe_allow_html=True)
 
-# --- Layout ---
+# --- MAIN EXECUTION ---
 
-inject_custom_css()
+def main():
+    """Main Application Entry Point."""
+    setup_page()
+    render_header()
+    
+    # Main Grid Layout
+    col_feed, col_graph, col_log = st.columns([1, 2, 1])
+    
+    with col_feed:
+        render_feed_module()
+    
+    with col_graph:
+        render_graph_module()
+    
+    with col_log:
+        render_log_module()
+        
+    st.write("") # Spacer
+    
+    # Metrics
+    render_metrics_module()
 
-st.title("COGNITIVE GRAPH PORTFOLIO OPTIMIZER")
-st.markdown("---")
+if __name__ == "__main__":
+    main()
 
-# Main Content
-col_left, col_center, col_right = st.columns([1, 2, 1])
 
-with col_left:
-    render_module_b_feed()
-
-with col_center:
-    render_module_a_graph()
-
-with col_right:
-    render_module_c_log()
-
-st.markdown("---")
-
-# Bottom Row
-render_module_d_metrics()
