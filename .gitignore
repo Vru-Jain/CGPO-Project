@@ -10,3 +10,15 @@ secrets.toml
 # --- PYTHON JUNK ---
 __pycache__/
 *.pyc
+
+# --- ENVIRONMENTS ---
+.venv/
+env/
+venv/
+.vscode/
+.idea/
+
+# --- ARTIFACTS ---
+*.log
+artifacts/
+.gemini/

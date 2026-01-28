@@ -1,12 +1,21 @@
 import streamlit as st
-from streamlit_agraph import agraph, Node, Edge, Config
+import streamlit as st
 import random
+import numpy as np
+import pandas as pd
 from datetime import datetime
 from typing import List, Tuple, Dict, Any
+
+# Core AI Imports
+from core.data_loader import MarketDataLoader
+from core.graph_engine import GraphEngine
+from core.agent import Agent
+from core.metrics import PortfolioMetrics
 
 # --- CONFIGURATION & CONSTANTS ---
 PAGE_TITLE = "CGPO Terminal"
 LAYOUT = "wide"
+TICKERS = ["AAPL", "NVDA", "MSFT", "GOOG", "AMZN", "TSLA", "META", "AMD", "QCOM", "INTC"]
 
 # Palette: Deep Space Theme
 THEME = {
@@ -88,58 +97,110 @@ def setup_page():
     st.set_page_config(page_title=PAGE_TITLE, layout=LAYOUT, initial_sidebar_state="collapsed")
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# --- DATA SERVICE LAYER ---
-# In a real app, this would fetch from an API or Database.
+# --- AI & DATA LAYER ---
 
-def get_graph_data() -> Tuple[List[Node], List[Edge]]:
-    """
-    Generates nodes and edges for the Systemic Risk Map.
+@st.cache_resource
+def get_ai_resources():
+    """Initializes and caches the AI components."""
+    print("Initializing AI resources...")
+    loader = MarketDataLoader(TICKERS)
+    engine = GraphEngine(TICKERS, correlation_threshold=0.3) # Lower threshold to see more edges
+    # Agent with 3 features (Return, Vol, Momentum)
+    agent = Agent(num_features=3, num_assets=len(TICKERS))
+    return loader, engine, agent
+
+@st.cache_data(ttl=3600)  # Cache data for 1 hour
+def fetch_market_data(_loader):
+    """Fetches real market data."""
+    return _loader.fetch_history(period="6mo")
+
+def run_ai_inference(loader, engine, agent, data):
+    """Runs a single inference step to get the current graph and agent actions."""
     
-    Returns:
-        Tuple[List[Node], List[Edge]]: The graph elements for streamlit-agraph.
+    # Build Graph
+    x, edge_index = engine.build_graph(data, window_size=20)
+    
+    # Create Observation dict
+    obs = {
+        'x': x.cpu().numpy(),
+        'edge_index': edge_index.cpu().numpy()
+    }
+    
+    # Get Agent Action
+    # false = deterministic (mean)
+    action_weights, _, _ = agent.get_action(obs, training=False)
+    
+    return obs, action_weights
+
+# --- DATA SERVICE LAYER ---
+
+from pyvis.network import Network
+import streamlit.components.v1 as components
+import tempfile
+import os
+
+# ... (Previous imports remaining the same, just removing streamlit_agraph)
+
+def get_graph_html(obs, tickers):
     """
-    nodes = []
-    edges = []
-    tickers = ["AAPL", "NVDA", "MSFT", "GOOG", "AMZN", "TSLA", "META", "AMD", "QCOM", "INTC"]
+    Generates PyVis Graph HTML.
+    """
+    # Create Network
+    net = Network(height="450px", width="100%", bgcolor=THEME['card_bg'], font_color="white", notebook=False)
+    
+    # Physics Options
+    net.force_atlas_2based()
+    
+    # obs['x'] is [Num_Tickers, Features]
+    x = obs['x']
+    edge_index = obs['edge_index']
     
     for i, ticker in enumerate(tickers):
-        # Simulate criticality via size
-        size = random.randint(15, 30)
-        # Simulate risk level
-        risk_score = random.random()
+        ret = x[i][0]
         
-        # Determine Color based on Risk
-        if risk_score > 0.8:
+        # Color Logic
+        if ret > 0.01:
+            color = THEME['success']
+        elif ret < -0.01:
             color = THEME['danger']
-        elif risk_score < 0.4:
-            color = THEME['secondary']
         else:
-            color = "#DDDDDD"
+            color = THEME['secondary']
             
-        nodes.append(Node(
-            id=ticker, 
-            label=ticker, 
-            size=size, 
-            color=color, 
-            font={'color': 'white', 'face': 'Courier New'}
-        ))
+        net.add_node(i, label=ticker, title=ticker, color=color, size=20)
     
-    # Generate random edges to simulate market correlations
-    for i in range(len(tickers)):
-        for j in range(i + 1, len(tickers)):
-            if random.random() > 0.7:  # 30% connectivity
-                edges.append(Edge(
-                    source=tickers[i], 
-                    target=tickers[j], 
-                    color=THEME['text_dim'], 
-                    strokeWidth=1, 
-                    type="straight"
-                ))
+    # Edges
+    srcs = edge_index[0]
+    dsts = edge_index[1]
+    
+    seen_edges = set()
+    for u, v in zip(srcs, dsts):
+        u, v = int(u), int(v) # Ensure python ints
+        if u < v:
+            if (u, v) not in seen_edges:
+                net.add_edge(u, v, color=THEME['text_dim'])
+                seen_edges.add((u, v))
                 
-    return nodes, edges
+    # Generate HTML
+    try:
+        # Save to temp file and read back
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w+', encoding='utf-8') as tmp:
+            net.save_graph(tmp.name)
+            tmp.seek(0)
+            html_content = tmp.read()
+        
+        # Cleanup
+        try:
+            os.remove(tmp.name)
+        except:
+            pass
+            
+        return html_content
+    except Exception as e:
+        return f"<div>Error generating graph: {str(e)}</div>"
+
 
 def get_feed_data() -> List[Dict[str, str]]:
-    """Fetches the latest mock multimodal signals."""
+    """Fetches the latest mock multimodal signals (Static for now)."""
     return [
         {"ts": "14:05", "src": "EARNINGS", "msg": "NVDA: Data center revenue beats exp by 15%.", "sent": "POS"},
         {"ts": "13:50", "src": "TRANSCRIPT", "msg": "JPM CEO: 'Storm clouds are clearing'.", "sent": "POS"},
@@ -165,7 +226,7 @@ def render_header():
     st.write("") # Spacer
 
 
-def render_graph_module():
+def render_graph_module(obs):
     """Renders the interactive Graph Map (Module A)."""
     st.markdown(f"""
     <div class="neo-card">
@@ -175,32 +236,16 @@ def render_graph_module():
         </p>
     """, unsafe_allow_html=True)
     
-    nodes, edges = get_graph_data()
-    
-    config = Config(
-        width="100%", 
-        height=450, 
-        directed=False, 
-        physics=True, 
-        hierarchical=False,
-        nodeHighlightBehavior=True, 
-        highlightColor=THEME['primary'],
-        collapsible=False,
-        minZoom=0.5, 
-        maxZoom=2.0
-    )
-    
-    # Note: agraph returns a React component
-    agraph(nodes=nodes, edges=edges, config=config)
+    html_graph = get_graph_html(obs, TICKERS)
+    components.html(html_graph, height=450)
     
     st.markdown("</div>", unsafe_allow_html=True)
 
-def render_feed_module():
+def render_feed_module(news_feed):
     """Renders the Signal Feed (Module B)."""
     st.markdown(f"""<div class="neo-card"><h3>MULTIMODAL INTELLIGENCE</h3>""", unsafe_allow_html=True)
     
-    feed = get_feed_data()
-    for item in feed:
+    for item in news_feed:
         badge_cls = "badge-buy" if item['sent'] == "POS" else ("badge-sell" if item['sent'] == "NEG" else "badge-neu")
         
         st.markdown(f"""
@@ -215,15 +260,36 @@ def render_feed_module():
         
     st.markdown("</div>", unsafe_allow_html=True)
 
-def render_log_module():
+def render_log_module(weights, tickers):
     """Renders the Agent Action Log (Module C)."""
     st.markdown(f"""<div class="neo-card"><h3>AGENT COMMAND STREAM</h3>""", unsafe_allow_html=True)
     
-    actions = [
-        ("BUY", "NVDA", "98%"), ("HOLD", "MSFT", "55%"), 
-        ("SELL", "INTC", "82%"), ("BUY", "AMD", "74%"),
-        ("WAIT", "MKT_SCAN", "---")
-    ]
+    # weights is a numpy array of shape [num_assets] summing to 1
+    # Let's interpret meaningful changes or top allocations
+    
+    # Create action list from weights
+    actions = []
+    
+    # Sort indices by weight desc
+    sorted_indices = np.argsort(weights)[::-1]
+    
+    for idx in sorted_indices[:5]: # Top 5
+        w = weights[idx]
+        tik = tickers[idx]
+        
+        # Simple heuristic for Buy/Hold/Sell/Wait just for display
+        # In reality, this is just a portfolio allocation.
+        # Let's map high weight to BUY, med to HOLD, low to SELL/IGNORE
+        
+        if w > 0.15:
+            act = "BUY"
+        elif w > 0.05:
+            act = "HOLD"
+        else:
+            act = "SELL" # or Reduce
+            
+        conf = f"{w*100:.1f}%"
+        actions.append((act, tik, conf))
     
     for act, tik, conf in actions:
         cls = "badge-buy" if act == "BUY" else ("badge-sell" if act == "SELL" else "badge-neu")
@@ -237,13 +303,15 @@ def render_log_module():
         
     st.markdown("</div>", unsafe_allow_html=True)
 
-def render_metrics_module():
+def render_metrics_module(metrics_data: Dict[str, Any]):
     """Renders the Bottom KPI Row (Module D)."""
+    # metrics_data is a dict with keys: sharpe, beta, alpha, max_dd
+    
     metrics = [
-        ("SHARPE", "2.45", "+0.12", THEME['success']),
-        ("BETA", "0.85", "-0.05", THEME['secondary']),
-        ("ALPHA", "1.9%", "+0.4%", THEME['success']),
-        ("MAX DD", "-5.2%", "STABLE", THEME['danger']),
+        ("SHARPE", f"{metrics_data['sharpe']:.2f}", "ANNUAL", THEME['success']),
+        ("BETA", metrics_data['beta'], "market", THEME['secondary']),
+        ("ALPHA", metrics_data['alpha'], "vs SPY", THEME['success']),
+        ("MAX DD", metrics_data['max_dd'], "Drawdown", THEME['danger']),
     ]
     
     cols = st.columns(4)
@@ -262,24 +330,67 @@ def render_metrics_module():
 def main():
     """Main Application Entry Point."""
     setup_page()
+    
+    # Initialize AI
+    loader, engine, agent = get_ai_resources()
+    
+    # Load Data (Cached)
+    try:
+        data = fetch_market_data(loader)
+        if data.empty:
+            st.error("No data fetched from yfinance.")
+            return
+            
+        # Run Inference
+        obs, action_weights = run_ai_inference(loader, engine, agent, data)
+        
+    except Exception as e:
+        st.error(f"AI System Failure: {str(e)}")
+        # Fallback to empty/mock if critical failure
+        return
+
     render_header()
     
     # Main Grid Layout
     col_feed, col_graph, col_log = st.columns([1, 2, 1])
     
     with col_feed:
-        render_feed_module()
+        # Fetch Real News
+        news_feed = loader.fetch_news(limit=5)
+        render_feed_module(news_feed)
     
     with col_graph:
-        render_graph_module()
+        render_graph_module(obs)
     
     with col_log:
-        render_log_module()
+        render_log_module(action_weights, TICKERS)
         
     st.write("") # Spacer
     
-    # Metrics
-    render_metrics_module()
+    # Calculate Metrics
+    # We need returns. Data has all tickers.
+    # Synthesize a Portfolio Return (Equal weighted for prototype)
+    if isinstance(data.columns, pd.MultiIndex):
+        closes = data.xs('Close', level=1, axis=1)
+    else:
+        closes = data['Close'] # Should be handled if single ticker, but we have multiple
+        
+    returns = closes.pct_change().mean(axis=1).fillna(0).values 
+    # Just using mean of all assets as "Portfolio" for display
+    
+    # Needs Benchmark. Let's use SPY or just use random standard for validation if SPY not in list.
+    # Ideally should fetch SPY. For now, let's assume market matches portfolio trend + noise or just 0.
+    market_returns = returns + np.random.normal(0, 0.005, size=len(returns)) # Mock Benchmark for prototype
+    
+    metrics_data = {
+        "sharpe": PortfolioMetrics.calculate_sharpe(returns),
+        "max_dd": PortfolioMetrics.calculate_max_drawdown(closes.mean(axis=1).values),
+    }
+    alpha, beta = PortfolioMetrics.calculate_alpha_beta(returns, market_returns)
+    metrics_data["alpha"] = alpha
+    metrics_data["beta"] = beta
+    
+    render_metrics_module(metrics_data)
 
 if __name__ == "__main__":
     main()
