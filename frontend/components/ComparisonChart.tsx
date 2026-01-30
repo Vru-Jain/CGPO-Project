@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface BenchmarkData {
     SPY?: { total_return: number; cumulative: number[]; dates: string[] };
@@ -79,8 +79,8 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: any })
                             key={p.value}
                             onClick={() => setPeriod(p.value)}
                             className={`px-2 py-1 text-xs rounded transition-colors ${period === p.value
-                                    ? "bg-primary text-black font-bold"
-                                    : "bg-transparent text-textDim hover:text-white border border-border"
+                                ? "bg-primary text-black font-bold"
+                                : "bg-transparent text-textDim hover:text-white border border-border"
                                 }`}
                         >
                             {p.label}
@@ -130,7 +130,10 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: any })
                         <Tooltip
                             contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #222' }}
                             itemStyle={{ fontSize: '12px' }}
-                            formatter={(value: number) => [`${value.toFixed(2)}%`, '']}
+                            formatter={(value: number | undefined) => {
+                                if (value === undefined) return ["0.00%", ""];
+                                return [`${value.toFixed(2)}%`, ""];
+                            }}
                         />
                         <Line type="monotone" dataKey="AI" stroke="#FF9900" strokeWidth={2.5} dot={false} name="AI Portfolio" />
                         <Line type="monotone" dataKey="SPY" stroke="#00F0FF" strokeWidth={2} dot={false} name="S&P 500" />
