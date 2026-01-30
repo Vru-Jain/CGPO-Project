@@ -3,6 +3,7 @@ from gymnasium import spaces
 import numpy as np
 import pandas as pd
 import torch
+import yfinance as yf
 from typing import Tuple, Dict, Any
 
 from core.graph_engine import GraphEngine
@@ -10,57 +11,64 @@ from core.graph_engine import GraphEngine
 class MarketGraphEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, tickers: list, data: pd.DataFrame, window_size: int = 20):
+    def __init__(self, tickers: list, data: pd.DataFrame, window_size: int = 20, benchmark: str = "SPY"):
         super(MarketGraphEnv, self).__init__()
         
         self.tickers = tickers
         self.data = data
         self.window_size = window_size
         self.n_assets = len(tickers)
+        self.benchmark = benchmark
+        
+        # Fetch benchmark data for the same period
+        self._load_benchmark()
         
         # Determine max steps
-        # We need at least window_size data points to start
         self.max_steps = len(data) - window_size - 1
         
         # Action Space: Portfolio weights for each asset
-        # We allow the agent to output raw scores, which we softmax later, 
-        # but for the env interface we expect values between 0 and 1 (or -1, 1).
-        # Let's say the agent outputs desired weights directly.
         self.action_space = spaces.Box(low=0, high=1, shape=(self.n_assets,), dtype=np.float32)
         
-        # Observation Space: Graph data is complex.
-        # We will return a Dict space containing 'x' and 'edge_index'.
-        # Note: edge_index size varies, so it's hard to define a static box. 
-        # We might just expose the raw numpy arrays in the keys.
+        # Observation Space
         self.observation_space = spaces.Dict({
             'x': spaces.Box(low=-np.inf, high=np.inf, shape=(self.n_assets, 3), dtype=np.float32),
-            # Edge index is dynamic, so we can't easily spec it in Gym without a specialized wrapper.
-            # We'll punt on the strict shape check for edge_index or use a large buffer.
-            # For now, we will just document that it returns 'edge_index'.
         })
         
         self.graph_engine = GraphEngine(tickers)
         
         self.current_step = window_size
         self.portfolio_value = 10000.0
+        self.benchmark_value = 10000.0
         self.current_weights = np.ones(self.n_assets) / self.n_assets
+        
+        # Track cumulative performance
+        self.agent_returns = []
+        self.benchmark_returns = []
+
+    def _load_benchmark(self):
+        """Load benchmark returns aligned with data index."""
+        try:
+            bench_data = yf.download(self.benchmark, period="1y", interval="1d", auto_adjust=True, progress=False)
+            self.benchmark_prices = bench_data['Close']
+            self.benchmark_daily_returns = bench_data['Close'].pct_change().fillna(0)
+        except:
+            # Fallback: use equal-weight portfolio as benchmark
+            self.benchmark_prices = None
+            self.benchmark_daily_returns = None
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.current_step = self.window_size
         self.portfolio_value = 10000.0
+        self.benchmark_value = 10000.0
         self.current_weights = np.ones(self.n_assets) / self.n_assets
+        self.agent_returns = []
+        self.benchmark_returns = []
         
         return self._get_observation(), {}
 
     def _get_observation(self):
-        # Slice data from (current_step - window_size) to current_step
-        # Note: yfinance data usually has Ticker as top level columns if multiple tickers
-        # We need to construct the window properly.
-        
-        # Simplified slicing:
         window_data = self.data.iloc[self.current_step - self.window_size : self.current_step]
-        
         x, edge_index = self.graph_engine.build_graph(window_data, self.window_size)
         
         return {
@@ -68,8 +76,27 @@ class MarketGraphEnv(gym.Env):
             'edge_index': edge_index.cpu().numpy()
         }
 
+    def _get_benchmark_return(self):
+        """Get benchmark return for current step."""
+        if self.benchmark_returns is None:
+            return 0.0
+        
+        try:
+            # Align with data index
+            current_date = self.data.index[self.current_step]
+            next_date = self.data.index[self.current_step + 1]
+            
+            if current_date in self.benchmark_prices.index and next_date in self.benchmark_prices.index:
+                price_t = self.benchmark_prices.loc[current_date]
+                price_t1 = self.benchmark_prices.loc[next_date]
+                return (price_t1 - price_t) / price_t
+        except:
+            pass
+        
+        return 0.0
+
     def step(self, action):
-        # Normalize action to sum to 1 (long only portfolio)
+        # Normalize action to sum to 1
         weights = np.array(action)
         if np.sum(weights) > 0:
             weights = weights / np.sum(weights)
@@ -78,9 +105,7 @@ class MarketGraphEnv(gym.Env):
             
         self.current_weights = weights
         
-        # Calculate return from current_step to current_step + 1
         # Get prices at t and t+1
-        # using 'Close' prices
         if isinstance(self.data.columns, pd.MultiIndex):
             prices_t = self.data.xs('Close', level=1, axis=1).iloc[self.current_step]
             prices_t1 = self.data.xs('Close', level=1, axis=1).iloc[self.current_step + 1]
@@ -90,15 +115,30 @@ class MarketGraphEnv(gym.Env):
             
         # Asset returns
         asset_returns = (prices_t1 - prices_t) / prices_t
-        asset_returns = asset_returns.values # ensure numpy array
+        asset_returns = asset_returns.values
         
         # Portfolio return
         port_return = np.dot(weights, asset_returns)
-        
         self.portfolio_value *= (1 + port_return)
         
-        # Reward
-        reward = port_return
+        # Benchmark return
+        bench_return = self._get_benchmark_return()
+        self.benchmark_value *= (1 + bench_return)
+        
+        # Track returns
+        self.agent_returns.append(port_return)
+        self.benchmark_returns.append(bench_return)
+        
+        # REWARD = EXCESS RETURN OVER BENCHMARK
+        # Agent is rewarded for beating SPY, penalized for underperforming
+        excess_return = port_return - bench_return
+        reward = excess_return * 100  # Scale for learning
+        
+        # Bonus for consistent outperformance
+        if len(self.agent_returns) > 5:
+            recent_excess = np.mean(self.agent_returns[-5:]) - np.mean(self.benchmark_returns[-5:])
+            if recent_excess > 0:
+                reward += recent_excess * 10  # Consistency bonus
         
         # Advance time
         self.current_step += 1
@@ -108,11 +148,15 @@ class MarketGraphEnv(gym.Env):
         observation = self._get_observation()
         info = {
             'portfolio_value': self.portfolio_value,
-            'return': port_return,
+            'benchmark_value': self.benchmark_value,
+            'agent_return': port_return,
+            'benchmark_return': bench_return,
+            'excess_return': excess_return,
             'weights': weights
         }
         
         return observation, reward, terminated, truncated, info
+
 
 if __name__ == "__main__":
     # Test stub

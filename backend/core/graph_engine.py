@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from typing import Tuple, List
+from ta.momentum import RSIIndicator
+from ta.trend import MACD
+from ta.volatility import BollingerBands
 
 class GraphEngine:
     def __init__(self, tickers: List[str], correlation_threshold: float = 0.5):
@@ -50,8 +53,22 @@ class GraphEngine:
         # Feature 3: Momentum (Slope of linreg or just total return over window)
         momentum = (window_closes.iloc[-1] / window_closes.iloc[0] - 1).fillna(0).values
 
-        # Stack features
-        x = np.column_stack((returns, volatility, momentum))
+        # Feature 4: RSI (Relative Strength Index)
+        rsi_values = []
+        for ticker in self.tickers:
+             # Need a Series for TA
+             try:
+                 ticker_close = close_prices[ticker] if isinstance(close_prices, pd.DataFrame) else close_prices
+                 # We need more history for RSI than just window_size often, but let's try
+                 rsi_ind = RSIIndicator(close=ticker_close, window=14)
+                 rsi = rsi_ind.rsi().iloc[-1]
+                 rsi_values.append(rsi if not np.isnan(rsi) else 50.0) 
+             except:
+                 rsi_values.append(50.0)
+        rsi_values = np.array(rsi_values) / 100.0 # Normalize 0-1
+
+        # Stack features: [Returns, Volatility, Momentum, RSI]
+        x = np.column_stack((returns, volatility, momentum, rsi_values))
         x = torch.tensor(x, dtype=torch.float32, device=self.device)
         
         # 2. Compute Edges (Correlation)

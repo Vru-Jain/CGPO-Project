@@ -47,6 +47,7 @@ class MarketDataLoader:
         """
         all_news = []
         import datetime
+        from textblob import TextBlob
         
         print("Fetching news...")
         for ticker in self.tickers:
@@ -81,11 +82,13 @@ class MarketDataLoader:
                         
                     time_str = dt.strftime('%H:%M')
                     
-                    # Simple heuristic for Sentiment
-                    title_lower = title.lower()
-                    if any(x in title_lower for x in ['surge', 'jump', 'beat', 'growth', 'record', 'bull', 'up', 'high']):
+                    # TextBlob for Sentiment
+                    blob = TextBlob(title)
+                    polarity = blob.sentiment.polarity
+                    
+                    if polarity > 0.1:
                         sent = "POS"
-                    elif any(x in title_lower for x in ['drop', 'fall', 'miss', 'declin', 'bear', 'down', 'warn', 'low']):
+                    elif polarity < -0.1:
                         sent = "NEG"
                     else:
                         sent = "NEU"
@@ -106,9 +109,51 @@ class MarketDataLoader:
         # Limit and clean up
         return all_news[:limit]
 
+    def fetch_benchmark(self, period: str = "6mo") -> pd.DataFrame:
+        """
+        Fetches benchmark index data (SPY, QQQ) for comparison.
+        Returns DataFrame with daily returns for both indices.
+        """
+        benchmarks = ["SPY", "QQQ"]
+        print(f"Fetching benchmark data ({', '.join(benchmarks)})...")
+        data = yf.download(benchmarks, period=period, interval="1d", group_by='ticker', auto_adjust=True, progress=False)
+        
+        result = {}
+        for bench in benchmarks:
+            if len(benchmarks) > 1:
+                close = data[bench]['Close']
+            else:
+                close = data['Close']
+            result[bench] = close
+            result[f"{bench}_return"] = close.pct_change()
+        
+        return pd.DataFrame(result)
+
+    def get_benchmark_performance(self, period: str = "1mo") -> Dict:
+        """
+        Returns cumulative performance of benchmarks over given period.
+        """
+        df = self.fetch_benchmark(period)
+        
+        performance = {}
+        for bench in ["SPY", "QQQ"]:
+            if bench in df.columns:
+                returns = df[f"{bench}_return"].dropna()
+                cumulative = (1 + returns).cumprod()
+                performance[bench] = {
+                    "total_return": float((cumulative.iloc[-1] - 1) * 100) if len(cumulative) > 0 else 0,
+                    "daily_returns": returns.tolist(),
+                    "dates": [d.strftime("%Y-%m-%d") for d in returns.index],
+                    "cumulative": cumulative.tolist()
+                }
+        
+        return performance
+
 if __name__ == "__main__":
     # Simple test
     loader = MarketDataLoader(["AAPL", "MSFT", "NVDA"])
     df = loader.fetch_history(period="1mo")
     print(df.head())
     print("Latest:", loader.get_latest_prices())
+    print("Benchmark:", loader.get_benchmark_performance("1mo"))
+

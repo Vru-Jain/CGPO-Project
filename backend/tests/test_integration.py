@@ -18,8 +18,8 @@ def run_test():
     print("Node Features shape:", obs['x'].shape)
     
     print("\n>>> 3. Initializing Agent...")
-    # Features = 3 (Return, Vol, Momentum)
-    agent = Agent(num_features=3, num_assets=len(tickers))
+    # Features = 4 (Return, Vol, Momentum, RSI)
+    agent = Agent(num_features=4, num_assets=len(tickers))
     
     print("\n>>> 4. Starting Training (Simulation)...")
     rewards = agent.train(env, episodes=2)

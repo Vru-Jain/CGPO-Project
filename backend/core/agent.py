@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -106,4 +107,18 @@ class Agent:
             if (ep+1) % 1 == 0:
                 print(f"Episode {ep+1}: Total Reward: {total_reward:.4f}")
                 
+                
         return all_rewards
+
+    def save_model(self, path="models/agent.pth"):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self.policy.state_dict(), path)
+        print(f"Model saved to {path}")
+
+    def load_model(self, path="models/agent.pth"):
+        if os.path.exists(path):
+            self.policy.load_state_dict(torch.load(path, map_location=self.device))
+            self.policy.eval()
+            print(f"Model loaded from {path}")
+        else:
+            print(f"No model found at {path}, starting from scratch.")
