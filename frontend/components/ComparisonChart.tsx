@@ -20,23 +20,32 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: any })
     const [period, setPeriod] = useState("1mo");
     const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
     const [loading, setLoading] = useState(false);
-
-    const getApiUrl = (path: string) => {
-        if (typeof window === "undefined") return `http://localhost:8000${path}`;
-        const host = window.location.hostname;
-        return `http://${host}:8000${path}`;
-    };
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     const fetchBenchmark = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
         try {
-            const res = await fetch(getApiUrl(`/market/benchmark?period=${period}`));
+            console.log(`Fetching benchmark for period: ${period} via proxy...`);
+            const res = await fetch(`/py-api/market/benchmark?period=${period}`);
+            console.log("Fetch response status:", res.status);
+
             if (res.ok) {
                 const data = await res.json();
+                console.log("Benchmark data received:", data);
+                if (!data.benchmarks || (!data.benchmarks.SPY && !data.benchmarks.QQQ)) {
+                    console.warn("Benchmark data is missing SPY/QQQ keys");
+                    setFetchError("Received empty data from backend");
+                }
                 setBenchmarkData(data.benchmarks);
+            } else {
+                const text = await res.text();
+                console.error("Backend error response:", text);
+                setFetchError(`Backend returned ${res.status}: ${text.slice(0, 50)}`);
             }
         } catch (err) {
             console.error("Error fetching benchmark:", err);
+            setFetchError(`Connection failed: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
             setLoading(false);
         }
@@ -111,7 +120,11 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: any })
                 </div>
             </div>
 
-            {loading ? (
+            {fetchError ? (
+                <div className="flex items-center justify-center h-48 text-danger text-xs">
+                    ⚠️ {fetchError}
+                </div>
+            ) : loading ? (
                 <div className="flex items-center justify-center h-48 text-textDim">
                     Loading benchmark data...
                 </div>

@@ -5,15 +5,15 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 224, 224, 224;
-  --background-start-rgb: 5, 5, 5;
-  --background-end-rgb: 5, 5, 5;
+  --foreground-rgb: 235, 235, 235;
+  --background-start-rgb: 9, 14, 37;
+  --background-end-rgb: 9, 14, 37;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: #050505;
-  font-family: 'IBM Plex Mono', monospace;
+  color: #fff;
+  background: #090E25;
+  font-family: var(--font-bricolage), sans-serif;
 }
 
 /* Custom Scrollbar */
@@ -21,25 +21,26 @@ body {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #050505;
+  background: #090E25;
 }
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: #263A99;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #FF9900;
+  background: #1733C1;
 }
 
 
 .neo-card {
-  background-color: #0A0A0A;
-  border: 1px solid #222222;
-  border-radius: 0.25rem;
+  background-color: #090E25; /* Match bg for cleaner look, or slightly lighter */
+  border: 1px solid #1F2336;
+  border-radius: 8px; /* Slightly more rounded like Aden */
   padding: 1rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  transition: border-color 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
 }
 .neo-card:hover {
-  border-color: #374151;
+  border-color: #263A99;
+  box-shadow: 0 0 15px rgba(38, 58, 153, 0.1);
 }

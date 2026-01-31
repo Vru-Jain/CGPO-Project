@@ -5,6 +5,7 @@ import { AlertCircle, RefreshCw, Settings, BrainCircuit, Zap } from "lucide-reac
 import GraphModule from "@/components/GraphModule";
 import ComparisonChart from "@/components/ComparisonChart";
 import MetricsPanel from "@/components/MetricsPanel";
+import ExecutionLog from "@/components/ExecutionLog";
 
 // Preset portfolios for quick switching
 const PRESETS = {
@@ -26,9 +27,8 @@ export default function Dashboard() {
 
   // Determine API Base URL (Dynamic for Network Access)
   const getApiUrl = (path: string) => {
-    if (typeof window === "undefined") return `http://localhost:8000${path}`;
-    const host = window.location.hostname;
-    return `http://${host}:8000${path}`;
+    if (typeof window === "undefined") return `http://127.0.0.1:8000${path}`;
+    return `/py-api${path}`;
   };
 
   const fetchInference = async () => {
@@ -259,72 +259,72 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Metrics Panel */}
-      {data?.metrics && <MetricsPanel metrics={data.metrics} />}
+      {/* BENTO GRID LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 w-full">
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
+        {/* LEFT COLUMN (Control Plane) - Spans 8 cols */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
 
-        {/* Left: Feed */}
-        <div className="neo-card lg:col-span-1 flex flex-col">
-          <h3 className="text-secondary border-b border-border pb-1 mb-4 font-semibold">SIGNAL FEED</h3>
-          <div className="space-y-3 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
-            {news.length === 0 ? (
-              <div className="text-textDim text-sm text-center py-10">Waiting for signals...</div>
-            ) : (
-              news.map((item, i) => (
-                <div key={i} className={`p-3 border-l-2 bg-white/5 ${item.sent === "POS" ? "border-success" : (item.sent === "NEG" ? "border-danger" : "border-textDim")
-                  }`}>
-                  <div className="flex justify-between mb-1">
-                    <span className={`text-[10px] px-1 rounded font-bold ${item.sent === "POS" ? "text-success bg-success/10" : (item.sent === "NEG" ? "text-danger bg-danger/10" : "text-textDim bg-white/10")
-                      }`}>{item.src}</span>
-                    <span className="text-[10px] text-textDim">{item.ts}</span>
-                  </div>
-                  <div className="text-xs leading-relaxed">{item.msg}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Center: Graph */}
-        <div className="lg:col-span-2">
-          {data ? <GraphModule data={data.graph} /> : <div className="h-[450px] neo-card flex items-center justify-center text-textDim">Waiting for Data...</div>}
-        </div>
-
-        {/* Right: Actions */}
-        <div className="neo-card lg:col-span-1">
-          <h3 className="text-secondary border-b border-border pb-1 mb-4 font-semibold">AGENT ACTIONS</h3>
-          {data?.weights && (
-            <div className="space-y-2">
-              {Object.entries(data.weights)
-                .sort(([, a]: any, [, b]: any) => b - a)
-                .map(([ticker, w]: any) => (
-                  <div key={ticker} className="flex justify-between items-center bg-white/5 p-2 rounded">
-                    <span className="font-bold text-secondary">{ticker}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1.5 bg-border rounded overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${w * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-sm w-12 text-right">{(w * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-                ))}
+          {/* Zone A: The Brain (Graph) */}
+          <div className="neo-card flex-1 min-h-[500px] relative overflow-hidden group border-primary/20 hover:border-primary/50 transition-colors">
+            {/* "Brain" Label Overlay */}
+            <div className="absolute top-4 left-4 z-10 pointer-events-none">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-secondary animate-pulse rounded-full"></div>
+                <span className="text-secondary text-xs font-bold tracking-widest opacity-80 font-mono">CORTEX_ACTIVE_GRAPH</span>
+              </div>
             </div>
-          )}
+            {data ? <GraphModule data={data.graph} /> : <div className="h-full flex items-center justify-center text-textDim italic">Initializing Neural Assets...</div>}
+          </div>
+
+          {/* Zone B: The Trace (Execution Log) */}
+          <div className="h-[250px] w-full">
+            <ExecutionLog />
+          </div>
+
         </div>
 
+        {/* RIGHT COLUMN (Intel & Ops) - Spans 4 cols */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+
+          {/* Metrics Panel */}
+          {data?.metrics && <MetricsPanel metrics={data.metrics} />}
+
+          {/* Zone C: Battlefield (Comparison) */}
+          <ComparisonChart agentWeights={data?.weights} />
+
+          {/* Zone D: Signals */}
+          <div className="neo-card flex-1 min-h-[300px] flex flex-col border-secondary/20">
+            <h3 className="text-secondary border-b border-border pb-2 mb-2 font-bold flex justify-between items-center text-xs">
+              <span>SIGNAL INTELLIGENCE</span>
+              <span className="text-[10px] text-primary animate-pulse">LIVE STREAM</span>
+            </h3>
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-800 custom-scrollbar">
+              {news.length === 0 ? (
+                <div className="text-textDim text-xs italic text-center mt-10">Waiting for intelligence stream...</div>
+              ) : (
+                <div className="space-y-3">
+                  {news.map((item, i) => (
+                    <div key={i} className={`p-2 border-l-2 bg-white/5 transition-all hover:bg-white/10 ${item.sent === "POS" ? "border-success" : (item.sent === "NEG" ? "border-danger" : "border-textDim")
+                      }`}>
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-bold text-xs text-secondary">{item.src}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${item.sent === "POS" ? "bg-success/20 text-success" : (item.sent === "NEG" ? "bg-danger/20 text-danger" : "bg-gray-800 text-gray-400")
+                          }`}>
+                          {item.sent}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-300 leading-tight font-mono opacity-90">{item.msg || item.title}</p>
+                      <span className="text-[10px] text-gray-600 block mt-1 text-right font-mono">{item.ts}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
       </div>
-
-      {/* Portfolio Battle Section */}
-      {data?.weights && (
-        <div className="animate-in fade-in slide-in-from-bottom-5 duration-700 delay-200">
-          <ComparisonChart agentWeights={data.weights} />
-        </div>
-      )}
     </main>
   );
 }
