@@ -63,7 +63,7 @@ class GraphEngine:
                  rsi_ind = RSIIndicator(close=ticker_close, window=14)
                  rsi = rsi_ind.rsi().iloc[-1]
                  rsi_values.append(rsi if not np.isnan(rsi) else 50.0) 
-             except:
+             except Exception:
                  rsi_values.append(50.0)
         rsi_values = np.array(rsi_values) / 100.0 # Normalize 0-1
 

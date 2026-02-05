@@ -2,6 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Network } from "lucide-react";
 
 // Dynamic import to avoid SSR issues with canvas
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
@@ -22,7 +24,8 @@ export default function GraphModule({ data }: { data: GraphData }) {
     // Memoize graph to prevent flicker
     const memoData = useMemo(() => {
         return {
-            nodes: data.nodes.map(n => ({ ...n, val: Math.abs(n.return) * 500 + 5 })), // Size by return magnitude
+            // Use a constant node size so bubble size is not affected by return
+            nodes: data.nodes.map(n => ({ ...n, val: 10 })), // Uniform size for all nodes
             links: data.edges.map(e => ({ source: e.source, target: e.target }))
         }
     }, [data]);
@@ -147,9 +150,9 @@ export default function GraphModule({ data }: { data: GraphData }) {
                 </p>
             </div>
 
-            {/* Risk Legend */}
+            {/* Risk Legend - pinned to far right, vertically centered to avoid header overlap */}
             {selectedNode && atRiskNodes.size > 0 && (
-                <div className="absolute top-3 right-4 z-10 bg-black/80 border border-red-500/50 rounded px-3 py-2">
+                <div className="absolute top-1/2 right-4 -translate-y-1/2 transform z-10 bg-black/80 border border-red-500/50 rounded px-3 py-2 max-w-xs">
                     <p className="text-red-400 text-xs font-bold mb-1">⚠ CONTAGION RISK</p>
                     <p className="text-xs text-gray-300">
                         If <span className="text-yellow-400">{selectedNode}</span> fails:

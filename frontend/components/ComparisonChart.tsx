@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+    ChartConfig,
+    ChartContainer,
+    ChartTooltip,
+    ChartTooltipContent,
+    ChartLegend,
+    ChartLegendContent
+} from "@/components/ui/chart";
 
 interface BenchmarkData {
     SPY?: { total_return: number; cumulative: number[]; dates: string[] };
@@ -9,15 +18,27 @@ interface BenchmarkData {
 }
 
 const PERIODS = [
-    { label: "1W", value: "5d" },
-    { label: "1M", value: "1mo" },
-    { label: "3M", value: "3mo" },
-    { label: "6M", value: "6mo" },
-    { label: "1Y", value: "1y" },
+    { label: "1 week", value: "5d" },
+    { label: "1 month", value: "1mo" },
+    { label: "3 months", value: "3mo" },
+    { label: "6 months", value: "6mo" },
+    { label: "1 year", value: "1y" },
 ];
 
-export default function ComparisonChart({ agentWeights }: { agentWeights: any }) {
-    const [period, setPeriod] = useState("1mo");
+const chartConfig = {
+    SPY: {
+        label: "SPY (S&P 500)",
+        color: "hsl(221.2 83.2% 53.3%)",
+    },
+    QQQ: {
+        label: "QQQ (Nasdaq 100)",
+        color: "hsl(212 95% 68%)",
+    },
+} satisfies ChartConfig;
+
+export default function ComparisonChart({ agentWeights }: { agentWeights: Record<string, number> | undefined }) {
+    const [period, setPeriod] = useState("3mo");
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
     const [loading, setLoading] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
@@ -26,26 +47,18 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: any })
         setLoading(true);
         setFetchError(null);
         try {
-            console.log(`Fetching benchmark for period: ${period} via proxy...`);
             const res = await fetch(`/py-api/market/benchmark?period=${period}`);
-            console.log("Fetch response status:", res.status);
-
             if (res.ok) {
                 const data = await res.json();
-                console.log("Benchmark data received:", data);
                 if (!data.benchmarks || (!data.benchmarks.SPY && !data.benchmarks.QQQ)) {
-                    console.warn("Benchmark data is missing SPY/QQQ keys");
-                    setFetchError("Received empty data from backend");
+                    setFetchError("No benchmark data available");
                 }
                 setBenchmarkData(data.benchmarks);
             } else {
-                const text = await res.text();
-                console.error("Backend error response:", text);
-                setFetchError(`Backend returned ${res.status}: ${text.slice(0, 50)}`);
+                setFetchError(`Backend error: ${res.status}`);
             }
         } catch (err) {
-            console.error("Error fetching benchmark:", err);
-            setFetchError(`Connection failed: ${err instanceof Error ? err.message : String(err)}`);
+            setFetchError(`Connection failed`);
         } finally {
             setLoading(false);
         }
@@ -55,95 +68,143 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: any })
         fetchBenchmark();
     }, [fetchBenchmark]);
 
-    // Build chart data from benchmark (purely from live market data)
+    // Build chart data
     const chartData = (() => {
         if (!benchmarkData?.SPY?.cumulative) return [];
-
         const spyCumulative = benchmarkData.SPY.cumulative;
         const qqCumulative = benchmarkData.QQQ?.cumulative || [];
         const dates = benchmarkData.SPY.dates;
 
         return dates.map((date, i) => ({
-            date: date.split("-").slice(1).join("/"), // MM/DD format
+            date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
             SPY: Number(((spyCumulative[i] - 1) * 100).toFixed(2)),
             QQQ: qqCumulative[i] ? Number(((qqCumulative[i] - 1) * 100).toFixed(2)) : 0,
         }));
     })();
 
-    const spyReturn = benchmarkData?.SPY?.total_return?.toFixed(2) || "0.00";
-    const qqReturn = benchmarkData?.QQQ?.total_return?.toFixed(2) || "0.00";
+    const selectedPeriod = PERIODS.find(p => p.value === period);
 
     return (
-        <div className="neo-card h-[350px]">
-            <div className="flex justify-between items-center border-b border-border pb-2 mb-4">
-                <h3 className="text-secondary font-semibold">MARKET BENCHMARKS</h3>
-                <div className="flex gap-1">
-                    {PERIODS.map((p) => (
-                        <button
-                            key={p.value}
-                            onClick={() => setPeriod(p.value)}
-                            className={`px-2 py-1 text-xs rounded transition-colors ${period === p.value
-                                ? "bg-primary text-black font-bold"
-                                : "bg-transparent text-textDim hover:text-white border border-border"
-                                }`}
+        <Card>
+            <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                <div className="grid flex-1 gap-1 text-center sm:text-left">
+                    <CardTitle>Market Benchmarks - Interactive</CardTitle>
+                    <CardDescription>
+                        Showing benchmark performance for the {selectedPeriod?.label || 'last 3 months'}
+                    </CardDescription>
+                </div>
+
+                {/* Period Dropdown */}
+                <div className="relative">
+                    <button
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-accent"
+                    >
+                        {selectedPeriod?.label || 'Last 3 months'}
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
                         >
-                            {p.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
+                            <path d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
 
-            {/* Performance Summary */}
-            <div className="flex gap-4 mb-3 text-xs">
-                <div className="flex items-center gap-2">
-                    <span className="w-3 h-1 bg-[#00F0FF] rounded"></span>
-                    <span className="text-textDim">SPY</span>
-                    <span className={Number(spyReturn) >= 0 ? "text-success" : "text-danger"}>
-                        {Number(spyReturn) >= 0 ? "+" : ""}{spyReturn}%
-                    </span>
+                    {isDropdownOpen && (
+                        <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+                            {PERIODS.map((p) => (
+                                <button
+                                    key={p.value}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPeriod(p.value);
+                                        setIsDropdownOpen(false);
+                                    }}
+                                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-accent ${period === p.value ? 'bg-accent text-accent-foreground' : ''
+                                        }`}
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="w-3 h-1 bg-[#FF3366] rounded"></span>
-                    <span className="text-textDim">QQQ</span>
-                    <span className={Number(qqReturn) >= 0 ? "text-success" : "text-danger"}>
-                        {Number(qqReturn) >= 0 ? "+" : ""}{qqReturn}%
-                    </span>
-                </div>
-            </div>
+            </CardHeader>
 
-            {fetchError ? (
-                <div className="flex items-center justify-center h-48 text-danger text-xs">
-                    ⚠️ {fetchError}
-                </div>
-            ) : loading ? (
-                <div className="flex items-center justify-center h-48 text-textDim">
-                    Loading benchmark data...
-                </div>
-            ) : (
-                <ResponsiveContainer width="100%" height="75%">
-                    <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#222" />
-                        <XAxis dataKey="date" stroke="#666" fontSize={10} tickLine={false} />
-                        <YAxis
-                            stroke="#666"
-                            fontSize={10}
-                            tickLine={false}
-                            domain={['auto', 'auto']}
-                            tickFormatter={(val) => `${val}%`}
-                        />
-                        <Tooltip
-                            contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #222' }}
-                            itemStyle={{ fontSize: '12px' }}
-                            formatter={(value: number | undefined) => {
-                                if (value === undefined) return ["0.00%", ""];
-                                return [`${value.toFixed(2)}%`, ""];
-                            }}
-                        />
-                        <Line type="monotone" dataKey="SPY" stroke="#00F0FF" strokeWidth={2} dot={false} name="S&P 500" />
-                        <Line type="monotone" dataKey="QQQ" stroke="#FF3366" strokeWidth={2} dot={false} name="Nasdaq 100" />
-                    </LineChart>
-                </ResponsiveContainer>
-            )}
-        </div>
+            <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+                {fetchError ? (
+                    <div className="flex h-[250px] items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                        ⚠️ {fetchError}
+                    </div>
+                ) : loading ? (
+                    <div className="flex h-[250px] items-center justify-center text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-primary" />
+                            Loading benchmark data...
+                        </div>
+                    </div>
+                ) : (
+                    <ChartContainer
+                        config={chartConfig}
+                        className="aspect-auto h-[250px] w-full"
+                    >
+                        <AreaChart data={chartData}>
+                            <defs>
+                                <linearGradient id="fillSPY" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="var(--color-SPY)" stopOpacity={0.8} />
+                                    <stop offset="95%" stopColor="var(--color-SPY)" stopOpacity={0.1} />
+                                </linearGradient>
+                                <linearGradient id="fillQQQ" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="var(--color-QQQ)" stopOpacity={0.8} />
+                                    <stop offset="95%" stopColor="var(--color-QQQ)" stopOpacity={0.1} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} />
+                            <XAxis
+                                dataKey="date"
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={8}
+                                minTickGap={32}
+                            />
+                            <YAxis
+                                tickLine={false}
+                                axisLine={false}
+                                tickFormatter={(value) => `${value}%`}
+                                tickMargin={8}
+                            />
+                            <ChartTooltip
+                                cursor={false}
+                                content={
+                                    <ChartTooltipContent
+                                        labelFormatter={(value) => value}
+                                        indicator="dot"
+                                    />
+                                }
+                            />
+                            <Area
+                                dataKey="QQQ"
+                                type="natural"
+                                fill="url(#fillQQQ)"
+                                stroke="var(--color-QQQ)"
+                                stackId="a"
+                            />
+                            <Area
+                                dataKey="SPY"
+                                type="natural"
+                                fill="url(#fillSPY)"
+                                stroke="var(--color-SPY)"
+                                stackId="b"
+                            />
+                            <ChartLegend content={<ChartLegendContent />} />
+                        </AreaChart>
+                    </ChartContainer>
+                )}
+            </CardContent>
+        </Card>
     );
 }

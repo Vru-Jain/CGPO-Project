@@ -1,12 +1,14 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Literal
 import pandas as pd
 import numpy as np
 import uvicorn
 import os
 import threading
+import time
+from datetime import datetime
 
 # Core Logic Imports
 from core.data_loader import MarketDataLoader
@@ -17,9 +19,13 @@ from core.market_env import MarketGraphEnv
 app = FastAPI(title="CGPO API", description="Cognitive Graph Portfolio Optimizer Backend")
 
 # CORS Configuration
+# In production, set ALLOWED_ORIGINS env var (comma-separated)
+# For dev, allow all origins
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",") if os.getenv("ALLOWED_ORIGINS") else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for dev
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,18 +47,50 @@ state = {
 # Simple lock to protect concurrent access to the in-memory state
 state_lock = threading.RLock()
 
+# --- Lightweight Execution Log (for frontend trace panel) ---
+LogType = Literal["INFO", "WARN", "ERROR", "SUCCESS", "TRACE"]
+
+class LogRecord(BaseModel):
+    id: int
+    timestamp: str
+    type: LogType
+    message: str
+
+_LOG_BUFFER: list[LogRecord] = []
+_LOG_LOCK = threading.RLock()
+_LOG_MAX_LEN = 200
+
+
+def add_log(log_type: LogType, message: str) -> None:
+    """Append a log entry to the in-memory ring buffer."""
+    record = LogRecord(
+        id=int(time.time() * 1000),
+        timestamp=datetime.now().strftime("%H:%M:%S"),
+        type=log_type,
+        message=message,
+    )
+    with _LOG_LOCK:
+        _LOG_BUFFER.append(record)
+        if len(_LOG_BUFFER) > _LOG_MAX_LEN:
+            # Keep only the most recent N entries
+            del _LOG_BUFFER[0 : len(_LOG_BUFFER) - _LOG_MAX_LEN]
+
+
 # --- Pydantic Models ---
 class TickerList(BaseModel):
     tickers: List[str]
 
+
 class InferenceResponse(BaseModel):
     tickers: List[str]
     weights: Dict[str, float]
-    graph_data: Dict # Edge list and node features
+    graph_data: Dict  # Edge list and node features
     metrics: Dict
+
 
 class TrainingRequest(BaseModel):
     episodes: int = 50
+
 
 # --- Helper to Init Resources ---
 def get_or_init_resources(tickers: List[str] = None):
@@ -100,6 +138,7 @@ def get_or_init_resources(tickers: List[str] = None):
 
 @app.get("/")
 def root():
+    add_log("INFO", "Root endpoint hit from frontend")
     return {
         "message": "Welcome to the CGPO API Backend 🤖",
         "status": "operational",
@@ -119,11 +158,13 @@ def set_tickers(payload: TickerList):
     
     # Re-initialise resources for the new universe.
     get_or_init_resources(payload.tickers)
+    add_log("INFO", f"Updated tickers universe: {', '.join(payload.tickers)}")
     return {"status": "updated", "count": len(payload.tickers), "tickers": payload.tickers}
 
 @app.get("/market/news")
 def get_news():
     loader, _, _ = get_or_init_resources()
+    add_log("TRACE", "Fetching latest market news")
     news = loader.fetch_news(limit=10)
     return news
 
@@ -138,11 +179,13 @@ def get_benchmark(period: str = "1mo"):
         performance = loader.get_benchmark_performance(period)
     except Exception as e:
         # Surface a clear error rather than fabricating simulated data.
+        add_log("ERROR", f"Benchmark fetch failed for period={period}: {e}")
         raise HTTPException(
             status_code=502,
             detail=f"Failed to fetch live benchmark data: {e}",
         )
 
+    add_log("SUCCESS", f"Fetched benchmark performance for period={period}")
     return {
         "period": period,
         "benchmarks": performance
@@ -151,12 +194,14 @@ def get_benchmark(period: str = "1mo"):
 @app.post("/ai/inference")
 def run_inference():
     """Runs the full GNN + RL pipeline."""
+    add_log("TRACE", "Inference requested")
     loader, engine, agent = get_or_init_resources()
     
     # 1. Fetch Data
     # For inference we need enough data for the window
     data = loader.fetch_history(period="6mo")
     if data.empty:
+        add_log("ERROR", "Inference failed: empty market data")
         raise HTTPException(status_code=500, detail="Failed to fetch market data")
     
     # 2. Build Graph
@@ -214,6 +259,7 @@ def run_inference():
             "sharpe_ratio": float(port_ret / port_vol) if port_vol > 0 else 0.0
         }
 
+        add_log("SUCCESS", "Inference completed successfully")
         return {
             "tickers": state["tickers"],
             "weights": weights_dict,
@@ -225,6 +271,7 @@ def run_inference():
         }
         
     except Exception as e:
+        add_log("ERROR", f"Inference error: {e}")
         raise HTTPException(status_code=500, detail=f"Inference Error: {str(e)}")
 
 @app.post("/ai/train")
@@ -244,6 +291,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
         state["training_total"] = payload.episodes
         state["training_last_reward"] = 0.0
 
+    add_log("INFO", f"Training requested for {payload.episodes} episodes")
     loader, _, agent = get_or_init_resources()
 
     # Fetch Data synchronously (could be slow, but safe)
@@ -251,6 +299,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
 
     def _train_task():
         print("Starting Background Training...")
+        add_log("TRACE", "Background training loop started")
         env = MarketGraphEnv(state["tickers"], data, window_size=20)
         
         # Custom training loop with status updates
@@ -299,27 +348,55 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
             with state_lock:
                 state["training_episode"] = ep + 1
                 state["training_last_reward"] = total_reward
+            add_log(
+                "TRACE",
+                f"Episode {ep+1}/{payload.episodes} completed (reward={total_reward:.4f})",
+            )
             print(f"Episode {ep+1}/{payload.episodes}: Reward: {total_reward:.4f}")
         
         agent.save_model()
         with state_lock:
             state["is_training"] = False
+        add_log("SUCCESS", "Training complete and model saved")
         print(f"Training Complete!")
         
     background_tasks.add_task(_train_task)
     
+    add_log("INFO", "Training job dispatched to background")
     return {"status": "training_started", "episodes": payload.episodes}
 
 @app.get("/ai/training-status")
 def get_training_status():
     """Returns current training status."""
     with state_lock:
-        return {
+        status = {
             "is_training": state["is_training"],
             "episode": state["training_episode"],
             "total": state["training_total"],
             "last_reward": state["training_last_reward"],
         }
+
+    # Only log transitions to avoid spamming logs on every poll
+    if status["is_training"]:
+        add_log(
+            "TRACE",
+            f"Training status polled: episode {status['episode']}/{status['total']}, last_reward={status['last_reward']:.4f}",
+        )
+
+    return status
+
+
+@app.get("/system/logs")
+def get_system_logs(limit: int = 50):
+    """
+    Returns the most recent execution log entries for the frontend console.
+    """
+    if limit <= 0:
+        limit = 1
+    with _LOG_LOCK:
+        # Return the last `limit` entries, oldest first
+        items = _LOG_BUFFER[-limit:]
+        return [item.dict() for item in items]
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

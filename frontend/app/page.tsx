@@ -1,11 +1,61 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { AlertCircle, RefreshCw, Settings, BrainCircuit, Zap } from "lucide-react";
+import { AlertCircle, BrainCircuit } from "lucide-react";
 import GraphModule from "@/components/GraphModule";
 import ComparisonChart from "@/components/ComparisonChart";
 import MetricsPanel from "@/components/MetricsPanel";
 import ExecutionLog from "@/components/ExecutionLog";
+import Header from "@/components/Header";
+import TickerModal from "@/components/TickerModal";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+
+// TypeScript Interfaces
+interface GraphNode {
+  id: string;
+  return: number;
+}
+
+interface GraphEdge {
+  source: string;
+  target: string;
+}
+
+interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+interface Metrics {
+  expected_return: number;
+  volatility: number;
+  sharpe_ratio: number;
+}
+
+interface InferenceData {
+  tickers: string[];
+  weights: Record<string, number>;
+  graph: GraphData;
+  metrics: Metrics;
+}
+
+interface NewsItem {
+  ts: string;
+  src: string;
+  msg?: string;
+  title?: string;
+  sent: "POS" | "NEG" | "NEU";
+}
+
+interface TrainingStatus {
+  episode: number;
+  total: number;
+  reward: number;
+}
 
 // Preset portfolios for quick switching
 const PRESETS = {
@@ -17,27 +67,21 @@ const PRESETS = {
 };
 
 export default function Dashboard() {
-  const [data, setData] = useState<any>(null);
-  const [news, setNews] = useState<any[]>([]);
+  const [data, setData] = useState<InferenceData | null>(null);
+  const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [training, setTraining] = useState(false);
-  const [trainingStatus, setTrainingStatus] = useState<{ episode: number, total: number, reward: number } | null>(null);
+  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(null);
   const [error, setError] = useState("");
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [tickerModalOpen, setTickerModalOpen] = useState(false);
 
-  // Refs to avoid stale closures inside intervals
   const loadingRef = useRef(loading);
   const trainingRef = useRef(training);
 
-  useEffect(() => {
-    loadingRef.current = loading;
-  }, [loading]);
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => { trainingRef.current = training; }, [training]);
 
-  useEffect(() => {
-    trainingRef.current = training;
-  }, [training]);
-
-  // Determine API Base URL (Dynamic for Network Access)
   const getApiUrl = (path: string) => {
     if (typeof window === "undefined") return `http://127.0.0.1:8000${path}`;
     return `/py-api${path}`;
@@ -51,7 +95,6 @@ export default function Dashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-
       if (!infRes.ok) throw new Error("Backend connection failed");
       const json = await infRes.json();
       setData(json);
@@ -63,7 +106,6 @@ export default function Dashboard() {
   };
 
   const startTraining = async () => {
-    // eslint-disable-next-line
     if (!confirm("Start training agent? This runs in the background.")) return;
     setTraining(true);
     setTrainingStatus({ episode: 0, total: 50, reward: 0 });
@@ -73,7 +115,6 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ episodes: 50 })
       });
-      // Start polling for status
       pollTrainingStatus();
     } catch (err) {
       alert("Failed to start training");
@@ -82,40 +123,42 @@ export default function Dashboard() {
     }
   };
 
-  const pollTrainingStatus = async () => {
+  const pollTrainingStatus = () => {
+    let cancelled = false;
     const poll = async () => {
+      if (cancelled) return;
       try {
         const res = await fetch(getApiUrl("/ai/training-status"));
         const status = await res.json();
+        if (cancelled) return;
         if (status.is_training) {
           setTrainingStatus({ episode: status.episode, total: status.total, reward: status.last_reward });
-          setTimeout(poll, 1000); // Poll every second
+          setTimeout(poll, 1000);
         } else {
           setTraining(false);
           setTrainingStatus(null);
-          fetchInference(); // Refresh with new model
+          fetchInference();
         }
       } catch {
-        setTraining(false);
-        setTrainingStatus(null);
+        if (!cancelled) {
+          setTraining(false);
+          setTrainingStatus(null);
+        }
       }
     };
     poll();
+    return () => { cancelled = true; };
   };
 
-  const configTickers = async () => {
-    // eslint-disable-next-line
-    const input = prompt("Enter Tickers (comma separated):", data?.tickers?.join(","));
-    if (input) {
-      const tickers = input.split(",").map((t: string) => t.trim().toUpperCase());
-      setActivePreset(null);
-      await fetch(getApiUrl("/config/tickers"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickers })
-      });
-      fetchInference();
-    }
+  const handleCustomTickers = async (tickers: string[]) => {
+    setActivePreset(null);
+    setLoading(true);
+    await fetch(getApiUrl("/config/tickers"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tickers })
+    });
+    fetchInference();
   };
 
   const loadPreset = async (presetName: string) => {
@@ -130,11 +173,6 @@ export default function Dashboard() {
     fetchInference();
   };
 
-  // Auto-refresh intervals
-  const INFERENCE_INTERVAL = 120000; // 120 seconds (2 minutes)
-  const NEWS_INTERVAL = 30000; // 30 seconds
-
-  // Fetch only news (lighter weight)
   const fetchNews = async () => {
     try {
       const res = await fetch(getApiUrl("/market/news"));
@@ -142,196 +180,174 @@ export default function Dashboard() {
         const newsJson = await res.json();
         setNews(newsJson);
       }
-    } catch {
-      // Silent fail for background refresh
-    }
+    } catch { /* Silent fail */ }
   };
 
   useEffect(() => {
-    // Initial fetch
     fetchInference();
     fetchNews();
-
-    // Set up auto-refresh intervals
     const inferenceTimer = setInterval(() => {
-      if (!loadingRef.current && !trainingRef.current) {
-        fetchInference();
-      }
-    }, INFERENCE_INTERVAL);
-
-    const newsTimer = setInterval(() => {
-      fetchNews();
-    }, NEWS_INTERVAL);
-
-    // Cleanup on unmount
+      if (!loadingRef.current && !trainingRef.current) fetchInference();
+    }, 120000);
+    const newsTimer = setInterval(fetchNews, 30000);
     return () => {
       clearInterval(inferenceTimer);
       clearInterval(newsTimer);
     };
   }, []);
 
+  const getSentimentStyle = (sent: string) => {
+    switch (sent) {
+      case "POS": return { variant: "default" as const, className: "bg-green-500/10 text-green-500 border-green-500/20" };
+      case "NEG": return { variant: "destructive" as const, className: "" };
+      default: return { variant: "secondary" as const, className: "" };
+    }
+  };
+
   return (
-    <main className="min-h-screen p-4 md:p-8 flex flex-col gap-6">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-end border-b border-border pb-4 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-primary tracking-widest">CGPO // <span className="text-white text-opacity-60 text-lg font-normal">TERMINAL</span></h1>
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-            <span className="text-xs text-textDim">SYSTEM OPERATIONAL</span>
-            {data?.tickers && (
-              <span className="text-xs text-textDim ml-2">// {data.tickers.length} ASSETS</span>
-            )}
-            <span className="text-xs text-secondary ml-2 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-ping"></span>
-              LIVE AUTO-REFRESH
-            </span>
-          </div>
-        </div>
+      <Header
+        onRefresh={fetchInference}
+        onTrain={startTraining}
+        onConfigTickers={() => setTickerModalOpen(true)}
+        onLoadPreset={loadPreset}
+        loading={loading}
+        training={training}
+        tickerCount={data?.tickers?.length}
+        activePreset={activePreset}
+        presets={PRESETS}
+      />
 
-        <div className="flex gap-2 flex-wrap justify-end">
-          <button
-            onClick={configTickers}
-            className="flex items-center gap-2 px-3 py-2 border border-border text-textDim hover:text-white transition-colors rounded text-xs font-bold"
-          >
-            <Settings size={14} /> CUSTOM
-          </button>
-          <button
-            onClick={startTraining}
-            disabled={training}
-            className="flex items-center gap-2 px-3 py-2 border border-primary text-primary hover:bg-primary hover:text-black transition-colors rounded text-xs font-bold disabled:opacity-50"
-          >
-            <BrainCircuit size={14} className={training ? "animate-pulse" : ""} />
-            {training ? "TRAINING..." : "TRAIN"}
-          </button>
-          <button
-            onClick={fetchInference}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 border border-secondary text-secondary hover:bg-secondary hover:text-black transition-colors rounded text-sm font-bold disabled:opacity-50"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            {loading ? "PROCESSING..." : "RUN INFERENCE"}
-          </button>
-        </div>
-      </header>
+      {/* Ticker Modal */}
+      <TickerModal
+        open={tickerModalOpen}
+        onOpenChange={setTickerModalOpen}
+        currentTickers={data?.tickers || []}
+        onSubmit={handleCustomTickers}
+      />
 
-      {/* Training Status Banner */}
-      {training && trainingStatus && (
-        <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 animate-pulse">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <BrainCircuit size={16} className="text-primary animate-spin" />
-              <span className="text-primary font-bold">TRAINING IN PROGRESS</span>
-            </div>
-            <span className="text-sm text-textDim">
-              Episode {trainingStatus.episode}/{trainingStatus.total}
-            </span>
-          </div>
-          <div className="w-full h-2 bg-border rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-500"
-              style={{ width: `${(trainingStatus.episode / trainingStatus.total) * 100}%` }}
-            />
-          </div>
-          <div className="mt-2 text-xs text-textDim">
-            Last Reward: <span className={trainingStatus.reward > 0 ? "text-success" : "text-danger"}>
-              {(Number(trainingStatus.reward) || 0).toFixed(4)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Preset Selector */}
-      <div className="flex gap-2 flex-wrap">
-        {Object.keys(PRESETS).map((preset) => (
-          <button
-            key={preset}
-            onClick={() => loadPreset(preset)}
-            disabled={loading}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold transition-all ${activePreset === preset
-              ? "bg-primary text-black"
-              : "border border-border text-textDim hover:border-primary hover:text-primary"
-              }`}
-          >
-            <Zap size={12} /> {preset}
-          </button>
-        ))}
-      </div>
-
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-900/20 border border-danger text-danger p-4 rounded flex items-center gap-3">
-          <AlertCircle />
-          <span>{error}. Make sure the Python Backend is running on port 8000.</span>
-        </div>
-      )}
-
-      {/* BENTO GRID LAYOUT */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 w-full">
-
-        {/* LEFT COLUMN (Control Plane) - Spans 8 cols */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
-
-          {/* Zone A: The Brain (Graph) */}
-          <div className="neo-card flex-1 min-h-[500px] relative overflow-hidden group border-primary/20 hover:border-primary/50 transition-colors">
-            {/* "Brain" Label Overlay */}
-            <div className="absolute top-4 left-4 z-10 pointer-events-none">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-secondary animate-pulse rounded-full"></div>
-                <span className="text-secondary text-xs font-bold tracking-widest opacity-80 font-mono">CORTEX_ACTIVE_GRAPH</span>
-              </div>
-            </div>
-            {data ? <GraphModule data={data.graph} /> : <div className="h-full flex items-center justify-center text-textDim italic">Initializing Neural Assets...</div>}
-          </div>
-
-          {/* Zone B: The Trace (Execution Log) */}
-          <div className="h-[250px] w-full">
-            <ExecutionLog />
-          </div>
-
-        </div>
-
-        {/* RIGHT COLUMN (Intel & Ops) - Spans 4 cols */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-
-          {/* Metrics Panel */}
-          {data?.metrics && <MetricsPanel metrics={data.metrics} />}
-
-          {/* Zone C: Battlefield (Comparison) */}
-          <ComparisonChart agentWeights={data?.weights} />
-
-          {/* Zone D: Signals */}
-          <div className="neo-card flex-1 min-h-[300px] flex flex-col border-secondary/20">
-            <h3 className="text-secondary border-b border-border pb-2 mb-2 font-bold flex justify-between items-center text-xs">
-              <span>SIGNAL INTELLIGENCE</span>
-              <span className="text-[10px] text-primary animate-pulse">LIVE STREAM</span>
-            </h3>
-            <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-800 custom-scrollbar">
-              {news.length === 0 ? (
-                <div className="text-textDim text-xs italic text-center mt-10">Waiting for intelligence stream...</div>
-              ) : (
-                <div className="space-y-3">
-                  {news.map((item, i) => (
-                    <div key={i} className={`p-2 border-l-2 bg-white/5 transition-all hover:bg-white/10 ${item.sent === "POS" ? "border-success" : (item.sent === "NEG" ? "border-danger" : "border-textDim")
-                      }`}>
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="font-bold text-xs text-secondary">{item.src}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${item.sent === "POS" ? "bg-success/20 text-success" : (item.sent === "NEG" ? "bg-danger/20 text-danger" : "bg-gray-800 text-gray-400")
-                          }`}>
-                          {item.sent}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-300 leading-tight font-mono opacity-90">{item.msg || item.title}</p>
-                      <span className="text-[10px] text-gray-600 block mt-1 text-right font-mono">{item.ts}</span>
-                    </div>
-                  ))}
+      <main className="p-6 space-y-6">
+        {/* Training Status Banner */}
+        {training && trainingStatus && (
+          <Card className="border-primary/50 bg-primary/5">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BrainCircuit className="h-4 w-4 text-primary animate-pulse" />
+                  <span className="font-semibold text-primary">Training in Progress</span>
                 </div>
-              )}
+                <span className="text-sm text-muted-foreground">
+                  Episode {trainingStatus.episode}/{trainingStatus.total}
+                </span>
+              </div>
+              <Progress value={(trainingStatus.episode / trainingStatus.total) * 100} className="h-2" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                Last Reward: <span className={trainingStatus.reward > 0 ? "text-green-500" : "text-red-500"}>
+                  {(Number(trainingStatus.reward) || 0).toFixed(4)}
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Error Banner */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {error}. Make sure the Python Backend is running on port 8000.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Metrics Panel */}
+        {data?.metrics && <MetricsPanel metrics={data.metrics} />}
+
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column - Graph & Logs */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Graph Module */}
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  Neural Asset Graph
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 h-[500px]">
+                {data ? (
+                  <GraphModule data={data.graph} />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    Initializing Neural Assets...
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Execution Log */}
+            <div className="h-[250px]">
+              <ExecutionLog />
             </div>
           </div>
 
+          {/* Right Column - Charts & News */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Comparison Chart */}
+            <ComparisonChart agentWeights={data?.weights} />
+
+            {/* Signal Intelligence */}
+            <Card className="h-[350px] flex flex-col">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium">Signal Intelligence</CardTitle>
+                  <Badge variant="outline" className="text-xs animate-pulse">
+                    Live
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full pr-4">
+                  {news.length === 0 ? (
+                    <div className="text-muted-foreground text-sm italic text-center py-8">
+                      Waiting for intelligence stream...
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {news.map((item, i) => {
+                        const style = getSentimentStyle(item.sent);
+                        return (
+                          <div
+                            key={`${item.ts}-${item.src}-${i}`}
+                            className={`p-3 rounded-lg border transition-colors hover:bg-accent/50 ${item.sent === "POS" ? "border-green-500/20" :
+                              item.sent === "NEG" ? "border-red-500/20" : "border-border"
+                              }`}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <span className="font-medium text-sm">{item.src}</span>
+                              <Badge variant={style.variant} className={style.className}>
+                                {item.sent}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {item.msg || item.title}
+                            </p>
+                            <span className="text-xs text-muted-foreground/60 mt-2 block">
+                              {item.ts}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

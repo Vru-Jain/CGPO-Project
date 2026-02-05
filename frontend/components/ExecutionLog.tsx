@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Activity } from "lucide-react";
 
 interface LogEntry {
     id: number;
@@ -9,73 +13,54 @@ interface LogEntry {
     message: string;
 }
 
+const typeVariants: Record<LogEntry["type"], { variant: "default" | "secondary" | "destructive" | "outline"; className: string }> = {
+    INFO: { variant: "secondary", className: "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" },
+    WARN: { variant: "secondary", className: "bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20" },
+    ERROR: { variant: "destructive", className: "" },
+    SUCCESS: { variant: "secondary", className: "bg-green-500/10 text-green-500 hover:bg-green-500/20" },
+    TRACE: { variant: "secondary", className: "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20" },
+};
+
 export default function ExecutionLog() {
     const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [error, setError] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Initial mock logs to populate the terminal
+    const getApiUrl = (path: string) => {
+        if (typeof window === "undefined") return `http://127.0.0.1:8000${path}`;
+        return `/py-api${path}`;
+    };
+
     useEffect(() => {
-        const initialLogs: LogEntry[] = [
-            { id: 1, timestamp: new Date().toLocaleTimeString(), type: "INFO", message: "System initialized. Kernel loaded." },
-            { id: 2, timestamp: new Date().toLocaleTimeString(), type: "INFO", message: "Connecting to Exchange Data Feeds..." },
-            { id: 3, timestamp: new Date().toLocaleTimeString(), type: "SUCCESS", message: "Connection established (Latency: 12ms)" },
-            { id: 4, timestamp: new Date().toLocaleTimeString(), type: "TRACE", message: "Loading GNN model: agent_v4.pth" },
-        ];
-        setLogs(initialLogs);
+        let cancelled = false;
 
-        // Simulate "alive" logs
-        const interval = setInterval(() => {
-            if (Math.random() > 0.7) {
-                addLog(generateMockLog());
+        const fetchLogs = async () => {
+            try {
+                const res = await fetch(getApiUrl("/system/logs?limit=50"));
+                if (!res.ok) {
+                    throw new Error(`Backend returned ${res.status}`);
+                }
+                const data: LogEntry[] = await res.json();
+                if (!cancelled) {
+                    setLogs(data);
+                    setError(null);
+                }
+            } catch (e: any) {
+                if (!cancelled) {
+                    setError(e.message || "Failed to load logs");
+                }
             }
-        }, 2000);
+        };
 
-        return () => clearInterval(interval);
+        fetchLogs();
+        const interval = setInterval(fetchLogs, 2000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
     }, []);
 
-    const addLog = (log: Omit<LogEntry, "id" | "timestamp">) => {
-        setLogs((prev) => {
-            const newLogs = [
-                ...prev,
-                {
-                    id: Date.now(),
-                    timestamp: new Date().toLocaleTimeString(),
-                    ...log,
-                },
-            ];
-            // Keep only last 50 logs
-            return newLogs.slice(-50);
-        });
-    };
-
-    // Mock log generator for visual effect
-    const generateMockLog = (): Omit<LogEntry, "id" | "timestamp"> => {
-        const types: LogEntry["type"][] = ["INFO", "TRACE", "WARN", "SUCCESS"];
-        const messages = [
-            "Scanning correlation matrix...",
-            "Updated node features for AAPL",
-            "GNN message passing cycle complete",
-            "Risk threshold check passed",
-            "Fetching latest market sentiment...",
-            "Rebalancing portfolio weights...",
-            "Detected volatility spike in Tech sector",
-            "Optimizing Bellman equation...",
-        ];
-
-        // Weighted random type
-        let type = types[0];
-        const rand = Math.random();
-        if (rand > 0.9) type = "WARN";
-        else if (rand > 0.7) type = "SUCCESS";
-        else if (rand > 0.4) type = "TRACE";
-
-        return {
-            type,
-            message: messages[Math.floor(Math.random() * messages.length)],
-        };
-    };
-
-    // Auto-scroll to bottom
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -83,38 +68,57 @@ export default function ExecutionLog() {
     }, [logs]);
 
     return (
-        <div className="neo-card h-full flex flex-col font-mono text-xs overflow-hidden">
-            <div className="flex justify-between items-center border-b border-border pb-2 mb-2">
-                <h3 className="text-secondary font-bold">EXECUTION TRACE</h3>
-                <div className="flex gap-2">
-                    <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-                    <span className="text-textDim">LIVE</span>
-                </div>
-            </div>
-
-            <div
-                ref={scrollRef}
-                className="flex-1 overflow-y-auto space-y-1 scrollbar-hide"
-            >
-                {logs.map((log) => (
-                    <div key={log.id} className="flex gap-2">
-                        <span className="text-textDim">[{log.timestamp}]</span>
-                        <span className={getTypeColor(log.type)}>{log.type}:</span>
-                        <span className="text-gray-300">{log.message}</span>
+        <Card className="h-full flex flex-col">
+            <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        Execution Trace
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">Live</span>
                     </div>
-                ))}
-            </div>
-        </div>
+                </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-hidden pb-4">
+                <ScrollArea className="h-full pr-4" ref={scrollRef}>
+                    <div className="space-y-2 font-mono text-xs">
+                        {error && logs.length === 0 && (
+                            <div className="text-destructive">
+                                Failed to load execution logs: {error}
+                            </div>
+                        )}
+                        {!error && logs.length === 0 && (
+                            <div className="text-muted-foreground italic text-center py-8">
+                                Waiting for execution events...
+                            </div>
+                        )}
+                        {logs.map((log) => {
+                            const typeStyle = typeVariants[log.type];
+                            return (
+                                <div key={log.id} className="flex items-start gap-2 py-1">
+                                    <span className="text-muted-foreground shrink-0">
+                                        [{log.timestamp}]
+                                    </span>
+                                    <Badge
+                                        variant={typeStyle.variant}
+                                        className={`shrink-0 text-[10px] px-1.5 ${typeStyle.className}`}
+                                    >
+                                        {log.type}
+                                    </Badge>
+                                    <span className="text-foreground/80 break-all">
+                                        {log.message}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+        </Card>
     );
-}
-
-function getTypeColor(type: LogEntry["type"]) {
-    switch (type) {
-        case "INFO": return "text-blue-400";
-        case "WARN": return "text-yellow-400";
-        case "ERROR": return "text-red-500 font-bold";
-        case "SUCCESS": return "text-green-400";
-        case "TRACE": return "text-purple-400";
-        default: return "text-gray-400";
-    }
 }
