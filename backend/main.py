@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import uvicorn
 import os
+import threading
 
 # Core Logic Imports
 from core.data_loader import MarketDataLoader
@@ -29,13 +30,16 @@ state = {
     "loader": None,
     "engine": None,
     "agent": None,
-    "tickers": ["AAPL", "NVDA", "MSFT", "GOOG", "AMZN", "TSLA", "META", "AMD", "QCOM", "INTC"], # Default
+    "tickers": ["AAPL", "NVDA", "MSFT", "GOOG", "AMZN", "TSLA", "META", "AMD", "QCOM", "INTC"],  # Default
     # Training Status
     "is_training": False,
     "training_episode": 0,
     "training_total": 0,
     "training_last_reward": 0.0,
 }
+
+# Simple lock to protect concurrent access to the in-memory state
+state_lock = threading.RLock()
 
 # --- Pydantic Models ---
 class TickerList(BaseModel):
@@ -52,28 +56,45 @@ class TrainingRequest(BaseModel):
 
 # --- Helper to Init Resources ---
 def get_or_init_resources(tickers: List[str] = None):
-    # If tickers provided and different, re-init
-    if tickers:
-        # Check if changed
-        current_set = set(state["tickers"])
-        new_set = set(tickers)
-        if current_set != new_set or state["loader"] is None:
-            print(f"Initializing AI for {len(tickers)} tickers...")
-            state["tickers"] = tickers
-            state["loader"] = MarketDataLoader(tickers)
-            state["engine"] = GraphEngine(tickers, correlation_threshold=0.3)
-            state["agent"] = Agent(num_features=4, num_assets=len(tickers))
-            # Try load model
+    """
+    Lazily (re)initialise shared resources.
+    Protected by a re-entrant lock so multiple requests can't trample state.
+    """
+    with state_lock:
+        # If tickers provided and different, re-init
+        if tickers:
+            current_set = set(state["tickers"])
+            new_set = set(tickers)
+            if current_set != new_set or state["loader"] is None:
+                print(f"Initializing AI for {len(tickers)} tickers...")
+                state["tickers"] = tickers
+                state["loader"] = MarketDataLoader(tickers)
+                state["engine"] = GraphEngine(tickers, correlation_threshold=0.3)
+                state["agent"] = Agent(num_features=4, num_assets=len(tickers))
+                # Try load model
+                try:
+                    state["agent"].load_model()
+                except Exception:
+                    # If no saved model yet, we just start fresh.
+                    pass
+
+        # If not init at all, initialise with current tickers
+        if state["loader"] is None:
+            print(f"Initializing AI for default tickers ({len(state['tickers'])})...")
+            tks = state["tickers"]
+            state["loader"] = MarketDataLoader(tks)
+            state["engine"] = GraphEngine(tks, correlation_threshold=0.3)
+            state["agent"] = Agent(num_features=4, num_assets=len(tks))
             try:
                 state["agent"].load_model()
-            except:
+            except Exception:
                 pass
-    
-    # If not init at all
-    if state["loader"] is None:
-        get_or_init_resources(state["tickers"])
-        
-    return state["loader"], state["engine"], state["agent"]
+
+        loader = state["loader"]
+        engine = state["engine"]
+        agent = state["agent"]
+
+    return loader, engine, agent
 
 # --- Endpoints ---
 
@@ -96,6 +117,7 @@ def set_tickers(payload: TickerList):
     if not payload.tickers:
         raise HTTPException(status_code=400, detail="Ticker list cannot be empty")
     
+    # Re-initialise resources for the new universe.
     get_or_init_resources(payload.tickers)
     return {"status": "updated", "count": len(payload.tickers), "tickers": payload.tickers}
 
@@ -112,7 +134,15 @@ def get_benchmark(period: str = "1mo"):
     Period options: 1d, 5d, 1mo, 3mo, 6mo, 1y
     """
     loader, _, _ = get_or_init_resources()
-    performance = loader.get_benchmark_performance(period)
+    try:
+        performance = loader.get_benchmark_performance(period)
+    except Exception as e:
+        # Surface a clear error rather than fabricating simulated data.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to fetch live benchmark data: {e}",
+        )
+
     return {
         "period": period,
         "benchmarks": performance
@@ -200,19 +230,26 @@ def run_inference():
 @app.post("/ai/train")
 def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
     """Triggers background training."""
-    if state["is_training"]:
-        return {"status": "already_training", "episode": state["training_episode"], "total": state["training_total"]}
-    
-    loader, _, agent = get_or_init_resources()
-    
-    # Fetch Data synchronously (could be slow, but safe)
-    data = loader.fetch_history(period="1y")
-    
-    def _train_task():
+    # Ensure only one training job runs at a time
+    with state_lock:
+        if state["is_training"]:
+            return {
+                "status": "already_training",
+                "episode": state["training_episode"],
+                "total": state["training_total"],
+            }
+        # Mark training as started
         state["is_training"] = True
         state["training_episode"] = 0
         state["training_total"] = payload.episodes
-        
+        state["training_last_reward"] = 0.0
+
+    loader, _, agent = get_or_init_resources()
+
+    # Fetch Data synchronously (could be slow, but safe)
+    data = loader.fetch_history(period="1y")
+
+    def _train_task():
         print("Starting Background Training...")
         env = MarketGraphEnv(state["tickers"], data, window_size=20)
         
@@ -258,13 +295,15 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
             loss.backward()
             agent.optimizer.step()
             
-            # Update status
-            state["training_episode"] = ep + 1
-            state["training_last_reward"] = total_reward
+            # Update status (protected by lock)
+            with state_lock:
+                state["training_episode"] = ep + 1
+                state["training_last_reward"] = total_reward
             print(f"Episode {ep+1}/{payload.episodes}: Reward: {total_reward:.4f}")
         
         agent.save_model()
-        state["is_training"] = False
+        with state_lock:
+            state["is_training"] = False
         print(f"Training Complete!")
         
     background_tasks.add_task(_train_task)
@@ -274,12 +313,13 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
 @app.get("/ai/training-status")
 def get_training_status():
     """Returns current training status."""
-    return {
-        "is_training": state["is_training"],
-        "episode": state["training_episode"],
-        "total": state["training_total"],
-        "last_reward": state["training_last_reward"]
-    }
+    with state_lock:
+        return {
+            "is_training": state["is_training"],
+            "episode": state["training_episode"],
+            "total": state["training_total"],
+            "last_reward": state["training_last_reward"],
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

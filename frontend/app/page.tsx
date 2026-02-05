@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { AlertCircle, RefreshCw, Settings, BrainCircuit, Zap } from "lucide-react";
 import GraphModule from "@/components/GraphModule";
 import ComparisonChart from "@/components/ComparisonChart";
@@ -25,6 +25,18 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [activePreset, setActivePreset] = useState<string | null>(null);
 
+  // Refs to avoid stale closures inside intervals
+  const loadingRef = useRef(loading);
+  const trainingRef = useRef(training);
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  useEffect(() => {
+    trainingRef.current = training;
+  }, [training]);
+
   // Determine API Base URL (Dynamic for Network Access)
   const getApiUrl = (path: string) => {
     if (typeof window === "undefined") return `http://127.0.0.1:8000${path}`;
@@ -35,20 +47,14 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const [infRes, newsRes] = await Promise.all([
-        fetch(getApiUrl("/ai/inference"), { method: "POST", headers: { "Content-Type": "application/json" } }),
-        fetch(getApiUrl("/market/news"))
-      ]);
+      const infRes = await fetch(getApiUrl("/ai/inference"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
 
       if (!infRes.ok) throw new Error("Backend connection failed");
       const json = await infRes.json();
       setData(json);
-
-      if (newsRes.ok) {
-        const newsJson = await newsRes.json();
-        setNews(newsJson);
-      }
-
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -125,7 +131,7 @@ export default function Dashboard() {
   };
 
   // Auto-refresh intervals
-  const INFERENCE_INTERVAL = 60000; // 60 seconds
+  const INFERENCE_INTERVAL = 120000; // 120 seconds (2 minutes)
   const NEWS_INTERVAL = 30000; // 30 seconds
 
   // Fetch only news (lighter weight)
@@ -144,10 +150,11 @@ export default function Dashboard() {
   useEffect(() => {
     // Initial fetch
     fetchInference();
+    fetchNews();
 
     // Set up auto-refresh intervals
     const inferenceTimer = setInterval(() => {
-      if (!loading && !training) {
+      if (!loadingRef.current && !trainingRef.current) {
         fetchInference();
       }
     }, INFERENCE_INTERVAL);
@@ -228,7 +235,7 @@ export default function Dashboard() {
           </div>
           <div className="mt-2 text-xs text-textDim">
             Last Reward: <span className={trainingStatus.reward > 0 ? "text-success" : "text-danger"}>
-              {trainingStatus.reward.toFixed(4)}
+              {(Number(trainingStatus.reward) || 0).toFixed(4)}
             </span>
           </div>
         </div>
