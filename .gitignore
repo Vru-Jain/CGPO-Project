@@ -1,6 +1,7 @@
 # --- SECRETS (NEVER UPLOAD) ---
 service_account.json
 secrets.toml
+*.pth
 .env
 
 # --- DATA (PRIVACY) ---
