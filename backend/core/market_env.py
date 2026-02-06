@@ -90,7 +90,9 @@ class MarketGraphEnv(gym.Env):
             if current_date in self.benchmark_prices.index and next_date in self.benchmark_prices.index:
                 price_t = self.benchmark_prices.loc[current_date]
                 price_t1 = self.benchmark_prices.loc[next_date]
-                return (price_t1 - price_t) / price_t
+                # Ensure scalar return (handle Series case)
+                ret = (price_t1 - price_t) / price_t
+                return float(ret.iloc[0]) if hasattr(ret, 'iloc') else float(ret)
         except:
             pass
         
