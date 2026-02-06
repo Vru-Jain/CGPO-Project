@@ -8,11 +8,12 @@ import numpy as np
 from core.models import GNNPolicy
 
 class Agent:
-    def __init__(self, num_features, num_assets, lr=0.001, gamma=0.99):
+    def __init__(self, num_features, num_assets, lr=0.001, gamma=0.99, entropy_coef=0.01):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.policy = GNNPolicy(num_features, hidden_dim=64).to(self.device)
         self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
         self.gamma = gamma
+        self.entropy_coef = entropy_coef
         self.num_assets = num_assets
 
     def get_action(self, obs, training=True):
@@ -21,8 +22,9 @@ class Agent:
         """
         x = torch.tensor(obs['x'], dtype=torch.float32).to(self.device)
         edge_index = torch.tensor(obs['edge_index'], dtype=torch.long).to(self.device)
+        edge_attr = torch.tensor(obs.get('edge_attr', []), dtype=torch.float32).to(self.device) if 'edge_attr' in obs else None
         
-        logits, value = self.policy(x, edge_index) # logits: [N], value: [1, 1]
+        logits, value = self.policy(x, edge_index, edge_attr)  # Pass edge weights
         
         # We need to sample weights. 
         # Deterministic: Softmax(logits)
@@ -42,8 +44,9 @@ class Agent:
             action = dist.mean # Deterministic
             
         log_prob = dist.log_prob(action)
+        entropy = dist.entropy()
         
-        return action.detach().cpu().numpy(), log_prob, value
+        return action.detach().cpu().numpy(), log_prob, value, entropy
 
     def train(self, env, episodes=10):
         self.policy.train()
@@ -60,9 +63,10 @@ class Agent:
             log_probs = []
             values = []
             rewards = []
+            entropies = []
             
             while not done:
-                action, log_prob, value = self.get_action(obs, training=True)
+                action, log_prob, value, entropy = self.get_action(obs, training=True)
                 
                 next_obs, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
@@ -70,6 +74,7 @@ class Agent:
                 log_probs.append(log_prob)
                 values.append(value)
                 rewards.append(reward)
+                entropies.append(entropy)
                 
                 obs = next_obs
                 total_reward += reward
@@ -87,7 +92,7 @@ class Agent:
                 returns = (returns - returns.mean()) / (returns.std() + 1e-8)
                 
             loss = 0
-            for log_prob, val, R in zip(log_probs, values, returns):
+            for log_prob, val, R, ent in zip(log_probs, values, returns, entropies):
                 advantage = R - val.item()
                 
                 # A2C Loss
@@ -96,11 +101,18 @@ class Agent:
                 
                 actor_loss = -log_prob * advantage
                 critic_loss = F.mse_loss(val.squeeze(), torch.tensor(R, device=self.device))
+                entropy_loss = -self.entropy_coef * ent.mean()
                 
-                loss += actor_loss + 0.5 * critic_loss
+                loss += actor_loss + 0.5 * critic_loss + entropy_loss
+                
+            # NaN Guard: Skip update if loss is unstable
+            if torch.isnan(loss) or torch.isinf(loss):
+                print(f"[Warning] Episode {ep+1}: Skipped update due to unstable loss (NaN/Inf)")
+                continue
                 
             self.optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=0.5)
             self.optimizer.step()
             
             all_rewards.append(total_reward)

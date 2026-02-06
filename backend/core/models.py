@@ -15,17 +15,21 @@ class GNNPolicy(nn.Module):
         # Critic Head: Projects global graph embedding to a scalar value
         self.critic_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, x, edge_index, batch=None):
+    def forward(self, x, edge_index, edge_attr=None, batch=None):
         """
         Args:
             x: Node features [N, F]
             edge_index: Graph connectivity [2, E]
+            edge_attr: Edge weights [E] (optional, correlation strength)
             batch: Batch vector, maps each node to a graph in the batch
         """
-        # GNN Layers
-        x = F.relu(self.conv1(x, edge_index))
+        # GCNConv supports edge_weight parameter for weighted message passing
+        edge_weight = edge_attr.abs() if edge_attr is not None and len(edge_attr) > 0 else None
+        
+        # GNN Layers with optional edge weights
+        x = F.relu(self.conv1(x, edge_index, edge_weight=edge_weight))
         x = F.dropout(x, p=0.1, training=self.training)
-        x = F.relu(self.conv2(x, edge_index)) # [N, hidden_dim]
+        x = F.relu(self.conv2(x, edge_index, edge_weight=edge_weight))  # [N, hidden_dim]
         
         # Actor: Calculate unnormalized action logits (per node)
         # We want to output a weight distribution across the N assets.

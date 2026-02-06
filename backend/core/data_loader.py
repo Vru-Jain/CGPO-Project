@@ -1,9 +1,38 @@
 import time
 import threading
+import functools
 
 import yfinance as yf
 import pandas as pd
 from typing import List, Dict, Optional
+
+
+def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0):
+    """Decorator to retry a function with exponential backoff on exception."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            delay = base_delay
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        print(f"[Retry] {func.__name__} failed after {max_retries} attempts: {e}")
+                        raise
+                    print(f"[Retry] {func.__name__} attempt {attempt+1} failed, retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+            return None
+        return wrapper
+    return decorator
+
+
+# Map short periods to longer fallbacks (for weekends/holidays)
+PERIOD_FALLBACKS = {
+    "1d": "5d",
+    "5d": "1mo",
+}
 
 
 class MarketDataLoader:
@@ -11,6 +40,8 @@ class MarketDataLoader:
     Thin wrapper around yfinance with:
     - simple in-memory caching to avoid hammering upstream APIs (rate-limit friendly)
     - strictly live-data semantics (no random/simulated fallbacks)
+    - retry logic with exponential backoff
+    - smart weekend/holiday fallback for short periods
     """
 
     # Cache time-to-live (seconds)
@@ -193,14 +224,14 @@ class MarketDataLoader:
 
         return trimmed
 
-    def fetch_benchmark(self, period: str = "6mo") -> pd.DataFrame:
+    def fetch_benchmark(self, period: str = "6mo", tickers: List[str] = None) -> pd.DataFrame:
         """
-        Fetches benchmark index data (SPY, QQQ) for comparison from live yfinance.
-        Returns DataFrame with daily returns for both indices.
+        Fetches benchmark index data for comparison from live yfinance.
+        Returns DataFrame with daily returns for indices.
         Uses caching to avoid repeated remote calls.
         """
-        benchmarks = ["SPY", "QQQ"]
-        cache_key = period
+        benchmarks = tickers if tickers else ["SPY", "QQQ"]
+        cache_key = f"{period}_{','.join(benchmarks)}"
         now = time.time()
 
         with self._lock:
@@ -209,25 +240,74 @@ class MarketDataLoader:
                 return cached
 
         print(f"Fetching benchmark data ({', '.join(benchmarks)}) for period={period}...")
-        data = yf.download(
-            benchmarks,
-            period=period,
-            interval="1d",
-            group_by="ticker",
-            auto_adjust=True,
-            progress=False,
-        )
+        
+        current_period = period
+        data = pd.DataFrame()
+        
+        # Try fetching, with fallback for weekends/holidays
+        for attempt in range(2):  # Max 2 attempts (original + fallback)
+            try:
+                data = yf.download(
+                    benchmarks,
+                    period=current_period,
+                    interval="1d",
+                    group_by="ticker",
+                    auto_adjust=True,
+                    progress=False,
+                )
+            except Exception as e:
+                print(f"Download error: {e}")
+                return pd.DataFrame()
+            
+            if not data.empty:
+                break  # Success
+            
+            # Try fallback period if available
+            fallback = PERIOD_FALLBACKS.get(current_period)
+            if fallback:
+                print(f"Empty data for '{current_period}', falling back to '{fallback}'...")
+                current_period = fallback
+            else:
+                break  # No more fallbacks
+
+        if data.empty:
+            print("Warning: Benchmark download returned empty data after fallback attempts.")
+            return pd.DataFrame()
 
         result: Dict[str, pd.Series] = {}
+        
+        # Handle Singe Ticker case (Flat DataFrame) vs Multi Ticker (MultiIndex)
+        is_multi_index = isinstance(data.columns, pd.MultiIndex)
+        
         for bench in benchmarks:
-            if len(benchmarks) > 1:
-                if bench not in data:
-                    continue
-                close = data[bench]["Close"]
-            else:
-                close = data["Close"]
-            result[bench] = close
-            result[f"{bench}_return"] = close.pct_change()
+            try:
+                if is_multi_index:
+                    if bench in data:
+                        # yfinance returns (Ticker, Column)
+                        df_bench = data[bench]
+                        close = df_bench["Close"] if "Close" in df_bench else df_bench.iloc[:, 0]
+                    else:
+                        print(f"Warning: {bench} not in multi-index columns")
+                        continue
+                else:
+                    # Flat DataFrame
+                    # If we asked for 1 ticker, this is it.
+                    # Verify if this data actually belongs to the ticker? 
+                    # yfinance doesn't label columns with ticker if single.
+                    if "Close" in data:
+                        close = data["Close"]
+                    elif "Adj Close" in data:
+                        close = data["Adj Close"]
+                    else:
+                         # Fallback to first column
+                        close = data.iloc[:, 0]
+
+                result[bench] = close
+                result[f"{bench}_return"] = close.pct_change()
+            
+            except Exception as e:
+                print(f"Error extracting data for {bench}: {e}")
+                continue
 
         df = pd.DataFrame(result)
 
@@ -237,16 +317,16 @@ class MarketDataLoader:
 
         return df
 
-    def get_benchmark_performance(self, period: str = "1mo") -> Dict:
+    def get_benchmark_performance(self, period: str = "1mo", tickers: List[str] = None) -> Dict:
         """
         Returns cumulative performance of benchmarks over given period.
-        This method no longer fabricates mock/simulated data – if live
-        data is unavailable, the caller should handle the error.
         """
-        df = self.fetch_benchmark(period)
+        df = self.fetch_benchmark(period, tickers)
+        
+        target_tickers = tickers if tickers else ["SPY", "QQQ"]
 
         performance: Dict[str, Dict] = {}
-        for bench in ["SPY", "QQQ"]:
+        for bench in target_tickers:
             return_col = f"{bench}_return"
             if return_col in df.columns:
                 returns = df[return_col].dropna()

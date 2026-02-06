@@ -69,11 +69,12 @@ class MarketGraphEnv(gym.Env):
 
     def _get_observation(self):
         window_data = self.data.iloc[self.current_step - self.window_size : self.current_step]
-        x, edge_index = self.graph_engine.build_graph(window_data, self.window_size)
+        x, edge_index, edge_attr = self.graph_engine.build_graph(window_data, self.window_size)
         
         return {
             'x': x.cpu().numpy(),
-            'edge_index': edge_index.cpu().numpy()
+            'edge_index': edge_index.cpu().numpy(),
+            'edge_attr': edge_attr.cpu().numpy()
         }
 
     def _get_benchmark_return(self):
@@ -133,6 +134,18 @@ class MarketGraphEnv(gym.Env):
         # Agent is rewarded for beating SPY, penalized for underperforming
         excess_return = port_return - bench_return
         reward = excess_return * 100  # Scale for learning
+        
+        # Volatility Penalty
+        # Penalty if portfolio return is too far from mean (simple proxy for volatility on single step)
+        # Better: Uses window standard deviation if available, but for now single step penalty:
+        reward -= 50.0 * np.abs(port_return) # Penalize large swings? No that penalizes upside too.
+        
+        # New Reward: Sharpe-like
+        # Reward = Return - 0.1 * Volatility
+        # We need historical volatility.
+        if len(self.agent_returns) > 20:
+             recent_vol = np.std(self.agent_returns[-20:])
+             reward -= recent_vol * 10.0 # Penalty for high volatility
         
         # Bonus for consistent outperformance
         if len(self.agent_returns) > 5:

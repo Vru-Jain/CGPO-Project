@@ -169,14 +169,16 @@ def get_news():
     return news
 
 @app.get("/market/benchmark")
-def get_benchmark(period: str = "1mo"):
+def get_benchmark(period: str = "1mo", ticker: str = None):
     """
     Returns benchmark performance data for comparison.
     Period options: 1d, 5d, 1mo, 3mo, 6mo, 1y
+    Ticker: Optional benchmark symbol (e.g. ^GSPC, ^NSEI). Defaults to SPY/QQQ if None.
     """
     loader, _, _ = get_or_init_resources()
     try:
-        performance = loader.get_benchmark_performance(period)
+        tickers = [ticker] if ticker else None
+        performance = loader.get_benchmark_performance(period, tickers)
     except Exception as e:
         # Surface a clear error rather than fabricating simulated data.
         add_log("ERROR", f"Benchmark fetch failed for period={period}: {e}")
@@ -215,7 +217,7 @@ def run_inference():
         }
         
         # 3. Agent Action
-        action_weights, _, _ = agent.get_action(obs, training=False)
+        action_weights, _, _, _ = agent.get_action(obs, training=False)
         
         # Format response
         weights_dict = {t: float(w) for t, w in zip(state["tickers"], action_weights)}
@@ -311,13 +313,14 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
             log_probs, values, rewards = [], [], []
             
             while not done:
-                action, log_prob, value = agent.get_action(obs, training=True)
+                action, log_prob, value, entropy = agent.get_action(obs, training=True)
                 next_obs, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
                 log_probs.append(log_prob)
                 values.append(value)
                 rewards.append(reward)
-                obs = next_obs
+                entropies.append(entropy)
+                (obs) = next_obs
                 total_reward += reward
             
             # Calculate returns
@@ -334,14 +337,16 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
                 returns = (returns - returns.mean()) / (returns.std() + 1e-8)
             
             loss = 0
-            for log_prob, val, R in zip(log_probs, values, returns):
+            for log_prob, val, R, ent in zip(log_probs, values, returns, entropies):
                 advantage = R - val.item()
                 actor_loss = -log_prob * advantage
                 critic_loss = F.mse_loss(val.squeeze(), torch.tensor(R, device=agent.device))
-                loss += actor_loss + 0.5 * critic_loss
+                entropy_loss = -agent.entropy_coef * ent.mean()
+                loss += actor_loss + 0.5 * critic_loss + entropy_loss
             
             agent.optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(agent.policy.parameters(), max_norm=0.5)
             agent.optimizer.step()
             
             # Update status (protected by lock)
