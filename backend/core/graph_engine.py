@@ -114,7 +114,7 @@ if __name__ == "__main__":
     df.columns = pd.MultiIndex.from_tuples(df.columns)
     
     engine = GraphEngine(tickers)
-    x, edge_index = engine.build_graph(df)
+    x, edge_index, edge_attr = engine.build_graph(df)
     
     print("Node Features Shape:", x.shape)
     print("Edge Index Shape:", edge_index.shape)
