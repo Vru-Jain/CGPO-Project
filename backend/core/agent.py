@@ -73,11 +73,11 @@ class Agent:
                 
                 log_probs.append(log_prob)
                 values.append(value)
-                rewards.append(reward)
+                rewards.append(float(reward))  # Ensure float
                 entropies.append(entropy)
                 
                 obs = next_obs
-                total_reward += reward
+                total_reward += float(reward)  # Ensure float
                 
             # Calculate returns and advantages
             returns = []
@@ -100,7 +100,9 @@ class Agent:
                 # Value Loss = (R - val)^2
                 
                 actor_loss = -log_prob * advantage
-                critic_loss = F.mse_loss(val.squeeze(), torch.tensor(R, device=self.device))
+                # Clone R tensor to avoid warning, ensure correct shape
+                R_tensor = R.clone().detach() if isinstance(R, torch.Tensor) else torch.tensor(R, device=self.device)
+                critic_loss = F.mse_loss(val.squeeze().unsqueeze(0), R_tensor.unsqueeze(0))
                 entropy_loss = -self.entropy_coef * ent.mean()
                 
                 loss += actor_loss + 0.5 * critic_loss + entropy_loss
