@@ -2,47 +2,62 @@
 
 An agentic AI system for financial analysis, powered by Graph Neural Networks (GNN) and Reinforcement Learning (RL).
 
-## Architecture
+## 📁 Project Structure
 
-This project maps a Full Stack architecture:
-
--   **Backend (`/backend`)**: Python (FastAPI). Handles data fetching (YFinance), AI Inference (PyTorch Geometric), and Agent Logic.
--   **Frontend (`/frontend`)**: Next.js (React) + Tailwind CSS. A modern "Neo-Bloomberg" terminal for visualizing the market graph and agent decisions.
-
-## Prerequisites
-
--   **Python 3.10+** (with `virtualenv` recommended)
--   **Node.js 18+**
+```
+📦 CGPO-Project
+├── 📂 backend/         # FastAPI backend (AI engine)
+├── 📂 frontend/        # Next.js dashboard
+├── 📂 docs/            # Deployment & setup guides
+├── 📂 notebooks/       # Colab notebooks (cloud training)
+├── 📂 scripts/         # Utility scripts
+├── 📂 LogBook/         # Project documentation
+├── 📂 experiments/     # Research experiments
+├── 📂 tests/           # Test suites
+└── 📂 assets/          # Static assets (logo)
+```
 
 ## Quick Start
 
-The project includes a unified launcher for Windows:
-
+### Option 1: Local Development
 ```powershell
-./start.ps1
+# Run from project root
+.\scripts\start.ps1
 ```
 
-This will launch:
-1.  **Backend API**: http://localhost:8000
-    -   Docs: http://localhost:8000/docs
-2.  **Frontend App**: http://localhost:3000
-
-## Manual Setup
-
-### 1. Backend
+### Option 2: Manual Setup
 ```bash
-cd backend
-pip install -r requirements.txt
+# Backend
+cd backend && pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+
+# Frontend (new terminal)
+cd frontend && npm install && npm run dev
 ```
 
-### 2. Frontend
+### Option 3: Docker
 ```bash
-cd frontend
-npm install
-npm run dev
+docker-compose up --build
 ```
+
+## 📚 Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [Deployment Guide](docs/DEPLOYMENT.md) | Full deployment instructions |
+| [Quick Deploy](docs/QUICK_DEPLOY.md) | Fast setup guide |
+
+## 🚀 Cloud Training
+
+Use the notebooks in `notebooks/` for GPU-accelerated training on Google Colab:
+- `cloud_train.ipynb` - Offline batch training
+- `colab_backend.ipynb` - Live backend with ngrok
+
+## URLs
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
 
 ## Security
--   Do not commit `service_account.json` or `.env` files.
--   The backend allows CORS `["*"]` for development convenience.
+- Do not commit `service_account.json` or `.env` files
+- Model files (`*.pth`) are gitignored
