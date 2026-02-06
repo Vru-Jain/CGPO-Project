@@ -209,7 +209,7 @@ def run_inference():
     # 2. Build Graph
     # Use last window
     try:
-        x, edge_index = engine.build_graph(data, window_size=20)
+        x, edge_index, edge_attr = engine.build_graph(data, window_size=20)
         
         obs = {
             'x': x.cpu().numpy(),

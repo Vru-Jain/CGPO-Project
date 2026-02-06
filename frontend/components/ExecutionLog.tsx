@@ -97,10 +97,10 @@ export default function ExecutionLog() {
                                 Waiting for execution events...
                             </div>
                         )}
-                        {logs.map((log) => {
+                        {logs.map((log, index) => {
                             const typeStyle = typeVariants[log.type];
                             return (
-                                <div key={log.id} className="flex items-start gap-2 py-1">
+                                <div key={`${log.id}-${index}`} className="flex items-start gap-2 py-1">
                                     <span className="text-muted-foreground shrink-0">
                                         [{log.timestamp}]
                                     </span>
