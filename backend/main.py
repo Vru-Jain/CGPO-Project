@@ -213,7 +213,8 @@ def run_inference():
         
         obs = {
             'x': x.cpu().numpy(),
-            'edge_index': edge_index.cpu().numpy()
+            'edge_index': edge_index.cpu().numpy(),
+            'edge_attr': edge_attr.cpu().numpy()
         }
         
         # 3. Agent Action
