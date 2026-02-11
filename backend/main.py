@@ -301,7 +301,10 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
     data = loader.fetch_history(period="1y")
 
     def _train_task():
-        print("Starting Background Training...")
+        import torch
+        device_name = "GPU: " + torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+        print(f"Starting Background Training on {device_name}...")
+        add_log("INFO", f"Training device: {device_name}")
         add_log("TRACE", "Background training loop started")
         env = MarketGraphEnv(state["tickers"], data, window_size=20)
         
@@ -311,7 +314,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
             obs, _ = env.reset()
             done = False
             total_reward = 0
-            log_probs, values, rewards = [], [], []
+            log_probs, values, rewards, entropies = [], [], [], []
             
             while not done:
                 action, log_prob, value, entropy = agent.get_action(obs, training=True)
