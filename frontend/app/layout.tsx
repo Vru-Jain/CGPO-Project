@@ -9,7 +9,7 @@ const bricolage = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "CGPO // TERMINAL",
+  title: "CGPO",
   description: "Cognitive Graph Portfolio Optimizer - Advanced Agentic-AI System",
   icons: {
     icon: "/icon.svg",
