@@ -59,13 +59,23 @@ def get_sheet():
             st.stop()
             
     # METHOD 2: Try to load from Local File (Best for Localhost/Laptop)
-    elif os.path.exists(KEY_FILE):
-        creds = ServiceAccountCredentials.from_json_keyfile_name(KEY_FILE, scope)
+    elif True:
+        # Check current directory, then script directory, then project root
+        possible_paths = [
+            KEY_FILE,
+            os.path.join(os.path.dirname(__file__), KEY_FILE),
+            os.path.join(os.path.dirname(__file__), "..", KEY_FILE),
+        ]
         
-    # FAILURE: Neither method worked
-    else:
-        st.error("❌ Critical Error: credentials not found in Secrets or Local File.")
-        st.stop()
+        creds = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                creds = ServiceAccountCredentials.from_json_keyfile_name(path, scope)
+                break
+        
+        if not creds:
+             st.error(f"❌ Critical Error: credentials not found in Secrets or Local File. Searched: {possible_paths}")
+             st.stop()
 
     # Connect to the Sheet
     try:
