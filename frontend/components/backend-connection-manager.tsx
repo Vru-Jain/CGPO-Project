@@ -30,8 +30,8 @@ export const useBackend = () => {
 
 // Provider Component
 export const BackendProvider = ({ children }: { children: ReactNode }) => {
-    // Default to localhost or env var, but prefer localStorage
-    const defaultUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    // Modal Cloud Backend URL
+    const defaultUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://vrushabhjain2016--cgpo-backend-serve.modal.run";
     const [backendUrl, setBackendUrlState] = useState(defaultUrl);
     const [isConnected, setIsConnected] = useState(false);
 
@@ -39,7 +39,10 @@ export const BackendProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         if (typeof window !== "undefined") {
             const stored = localStorage.getItem("cgpo_backend_url");
-            if (stored) setBackendUrlState(stored);
+            // If the user has an old ngrok URL saved, ignore it so we use Modal
+            if (stored && !stored.includes("ngrok")) {
+                setBackendUrlState(stored);
+            }
         }
     }, []);
 
