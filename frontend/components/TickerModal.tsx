@@ -30,13 +30,21 @@ export default function TickerModal({
     const [inputValue, setInputValue] = useState("");
     const [tickers, setTickers] = useState<string[]>([]);
 
-    // Initialize with current tickers when modal opens
+    // Initialize with current tickers only when the modal first opens.
+    // Intentionally NOT including `currentTickers` as a dependency — doing so
+    // causes this effect to fire every time the 2-min auto-inference refreshes
+    // data.tickers, wiping out whatever the user was typing.
+    const [initialised, setInitialised] = useState(false);
     useEffect(() => {
-        if (open) {
+        if (open && !initialised) {
             setTickers(currentTickers || []);
             setInputValue("");
+            setInitialised(true);
         }
-    }, [open, currentTickers]);
+        if (!open) {
+            setInitialised(false); // Reset so next open reinitialises
+        }
+    }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const addTickersFromInput = () => {
         if (!inputValue.trim()) return;
