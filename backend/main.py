@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Literal
 import pandas as pd
 import numpy as np
-import uvicorn
+import torch
+import torch.nn.functional as F
 import os
 import threading
 import time
@@ -18,18 +19,28 @@ from core.market_env import MarketGraphEnv
 
 app = FastAPI(title="CGPO API", description="Cognitive Graph Portfolio Optimizer Backend")
 
-# CORS Configuration
-# In production, set ALLOWED_ORIGINS env var (comma-separated)
-# For dev, allow all origins
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# In production, set ALLOWED_ORIGINS env var to your Vercel domain.
+# Wildcard is used as fallback for dev — credentials must be False with wildcard.
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",") if os.getenv("ALLOWED_ORIGINS") else ["*"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,   # Must be False when allow_origins=["*"]
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-Modal-Bypass-Interstitial"],
 )
+
+# ── Security Headers ──────────────────────────────────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next) -> Response:
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 # Global State (InMemory for prototype consistency)
 state = {
@@ -109,16 +120,12 @@ def get_or_init_resources(tickers: List[str] = None):
                 state["loader"] = MarketDataLoader(tickers)
                 state["engine"] = GraphEngine(tickers, correlation_threshold=0.3)
                 state["agent"] = Agent(num_features=4, num_assets=len(tickers))
-                # Try load model
                 try:
                     state["agent"].load_model()
                 except Exception:
-                    # If no saved model yet, we just start fresh.
                     pass
 
-        # If not init at all, initialise with current tickers
         if state["loader"] is None:
-            print(f"Initializing AI for default tickers ({len(state['tickers'])})...")
             tks = state["tickers"]
             state["loader"] = MarketDataLoader(tks)
             state["engine"] = GraphEngine(tks, correlation_threshold=0.3)
@@ -138,13 +145,7 @@ def get_or_init_resources(tickers: List[str] = None):
 
 @app.get("/")
 def root():
-    add_log("INFO", "Root endpoint hit from frontend")
-    return {
-        "message": "Welcome to the CGPO API Backend 🤖",
-        "status": "operational",
-        "frontend_url": "http://localhost:3000",
-        "documentation": "/docs"
-    }
+    return {"service": "CGPO API", "status": "operational", "docs": "/docs"}
 
 @app.get("/health")
 def health_check():
@@ -302,9 +303,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
     data = loader.fetch_history(period="1y")
 
     def _train_task():
-        import torch
         device_name = "GPU: " + torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-        print(f"Starting Background Training on {device_name}...")
         add_log("INFO", f"Training device: {device_name}")
         add_log("TRACE", "Background training loop started")
         env = MarketGraphEnv(state["tickers"], data, window_size=20)
@@ -335,8 +334,6 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
                 R = r + agent.gamma * R
                 returns.insert(0, R)
             
-            import torch
-            import torch.nn.functional as F
             returns = torch.tensor(returns, dtype=torch.float32).to(agent.device)
             if len(returns) > 1:
                 returns = (returns - returns.mean()) / (returns.std() + 1e-8)
@@ -367,8 +364,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
         agent.save_model()
         with state_lock:
             state["is_training"] = False
-        add_log("SUCCESS", "Training complete and model saved")
-        print(f"Training Complete!")
+        add_log("SUCCESS", "Training complete — model saved")
         
     background_tasks.add_task(_train_task)
     

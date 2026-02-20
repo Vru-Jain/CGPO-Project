@@ -1,14 +1,26 @@
 /**
- * Wrapper around the native fetch API to automatically inject headers required
- * for bypassing the ngrok browser warning screen when hitting the Colab backend.
+ * Central fetch wrapper for all CGPO API calls.
+ * Automatically injects the Modal bypass header (prevents 303 redirect loops
+ * on cold-start) and enforces a sensible request timeout.
  */
-export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function apiFetch(
+    input: RequestInfo | URL,
+    init?: RequestInit
+): Promise<Response> {
     const headers = new Headers(init?.headers);
-    headers.set('ngrok-skip-browser-warning', '69420');
-    headers.set('X-Modal-Bypass-Interstitial', 'true');
+    headers.set("X-Modal-Bypass-Interstitial", "true");
 
-    return fetch(input, {
-        ...init,
-        headers,
-    });
+    // Default 15-second timeout — prevents silent hangs when the GPU is warming up
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+    try {
+        return await fetch(input, {
+            ...init,
+            headers,
+            signal: init?.signal ?? controller.signal,
+        });
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }

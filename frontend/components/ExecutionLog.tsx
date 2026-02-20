@@ -57,7 +57,7 @@ export default function ExecutionLog() {
         };
 
         fetchLogs();
-        const interval = setInterval(fetchLogs, 2000);
+        const interval = setInterval(fetchLogs, 5000);
 
         return () => {
             cancelled = true;
