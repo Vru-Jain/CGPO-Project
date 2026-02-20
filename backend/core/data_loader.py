@@ -158,27 +158,24 @@ class MarketDataLoader:
         all_news: List[Dict[str, str]] = []
         import datetime
         from textblob import TextBlob
+        import concurrent.futures
 
-        print("Fetching news...")
-        for ticker in self.tickers:
+        print("Fetching news concurrently...")
+
+        def _fetch_single_news(ticker):
+            ticker_news = []
             try:
                 t = yf.Ticker(ticker)
-                # yfinance news is a list of dicts:
-                # {'uuid': ..., 'title': ..., 'publisher': ..., 'link': ..., 'providerPublishTime': ...}
                 news_items = t.news or []
 
                 for item in news_items:
-                    # Handle new yfinance structure where data is in 'content'
                     content = item.get("content", item)
-
                     title = content.get("title", "No Title")
 
-                    # Time extraction
                     if "providerPublishTime" in item:
                         ts = item["providerPublishTime"]
                         dt = datetime.datetime.fromtimestamp(ts)
                     elif "pubDate" in content:
-                        # ISO Format: 2024-01-28T14:38:35Z
                         try:
                             pub_date = content["pubDate"].replace("Z", "+00:00")
                             dt = datetime.datetime.fromisoformat(pub_date)
@@ -189,28 +186,27 @@ class MarketDataLoader:
 
                     time_str = dt.strftime("%H:%M")
 
-                    # TextBlob for Sentiment
                     blob = TextBlob(title)
                     polarity = blob.sentiment.polarity
+                    if polarity > 0.1: sent = "POS"
+                    elif polarity < -0.1: sent = "NEG"
+                    else: sent = "NEU"
 
-                    if polarity > 0.1:
-                        sent = "POS"
-                    elif polarity < -0.1:
-                        sent = "NEG"
-                    else:
-                        sent = "NEU"
-
-                    all_news.append(
-                        {
-                            "ts": time_str,
-                            "src": ticker,
-                            "msg": title,
-                            "sent": sent,
-                            "dt": dt,  # For sorting
-                        }
-                    )
+                    ticker_news.append({
+                        "ts": time_str,
+                        "src": ticker,
+                        "msg": title,
+                        "sent": sent,
+                        "dt": dt,
+                    })
             except Exception as e:
                 print(f"Error fetching news for {ticker}: {e}")
+            return ticker_news
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(self.tickers))) as executor:
+            results = executor.map(_fetch_single_news, self.tickers)
+            for res in results:
+                all_news.extend(res)
 
         # Sort by datetime desc
         all_news.sort(key=lambda x: x["dt"], reverse=True)
