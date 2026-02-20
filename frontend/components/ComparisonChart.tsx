@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
+import { useBackend } from "@/components/backend-connection-manager";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -48,6 +49,7 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: Record
     const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
     const [loading, setLoading] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    const { backendUrl } = useBackend();
 
     const fetchBenchmark = useCallback(async () => {
         setLoading(true);
@@ -55,7 +57,9 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: Record
         try {
             // Encode the ticker properly (e.g. ^ values)
             const tickerParam = encodeURIComponent(selectedBenchmark.value);
-            const res = await fetch(`/py-api/market/benchmark?period=${period}&ticker=${tickerParam}`);
+            const benchUrl = `${backendUrl.replace(/\/$/, "")}/market/benchmark?period=${period}&ticker=${tickerParam}`;
+
+            const res = await fetch(benchUrl);
             if (res.ok) {
                 const data = await res.json();
                 if (!data.benchmarks || Object.keys(data.benchmarks).length === 0) {

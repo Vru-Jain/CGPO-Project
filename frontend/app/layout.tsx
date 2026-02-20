@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { BackendProvider } from "@/components/backend-connection-manager";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -25,10 +27,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body
-        className={`${bricolage.variable} font-sans antialiased`}
-      >
-        {children}
+      <body className={`${bricolage.variable} font-sans antialiased`}>
+        <BackendProvider>
+          {children}
+        </BackendProvider>
       </body>
     </html>
   );

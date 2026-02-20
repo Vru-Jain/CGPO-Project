@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useBackend } from "@/components/backend-connection-manager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -25,10 +26,12 @@ export default function ExecutionLog() {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [error, setError] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const { backendUrl } = useBackend();
 
     const getApiUrl = (path: string) => {
-        if (typeof window === "undefined") return `http://127.0.0.1:8000${path}`;
-        return `/py-api${path}`;
+        const base = backendUrl.replace(/\/$/, "");
+        const endpoint = path.startsWith("/") ? path : `/${path}`;
+        return `${base}${endpoint}`;
     };
 
     useEffect(() => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useBackend } from "@/components/backend-connection-manager";
 import { AlertCircle, BrainCircuit } from "lucide-react";
 import GraphModule from "@/components/GraphModule";
 import ComparisonChart from "@/components/ComparisonChart";
@@ -82,9 +83,13 @@ export default function Dashboard() {
   useEffect(() => { loadingRef.current = loading; }, [loading]);
   useEffect(() => { trainingRef.current = training; }, [training]);
 
+  const { backendUrl } = useBackend();
+
   const getApiUrl = (path: string) => {
-    if (typeof window === "undefined") return `http://127.0.0.1:8000${path}`;
-    return `/py-api${path}`;
+    // Ensure backendUrl doesn't have trailing slash and path does
+    const base = backendUrl.replace(/\/$/, "");
+    const endpoint = path.startsWith("/") ? path : `/${path}`;
+    return `${base}${endpoint}`;
   };
 
   const fetchInference = async () => {
