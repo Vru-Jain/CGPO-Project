@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { apiFetch } from "@/lib/api";
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ export default function Dashboard() {
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [tickerModalOpen, setTickerModalOpen] = useState(false);
   const [showAchievement, setShowAchievement] = useState(false);
+  const [trainConfirmOpen, setTrainConfirmOpen] = useState(false);
 
   const loadingRef = useRef(loading);
   const trainingRef = useRef(training);
@@ -135,8 +137,7 @@ export default function Dashboard() {
     }
   };
 
-  const startTraining = async () => {
-    if (!confirm("Start training agent? This runs in the background.")) return;
+  const handleTrainConfirmed = async () => {
     setTraining(true);
     setTrainingStatus({ episode: 0, total: 50, reward: 0 });
     try {
@@ -147,11 +148,12 @@ export default function Dashboard() {
       });
       pollTrainingStatus();
     } catch {
-      alert("Failed to start training");
       setTraining(false);
       setTrainingStatus(null);
     }
   };
+
+  const startTraining = () => setTrainConfirmOpen(true);
 
   const pollTrainingStatus = () => {
     let cancelled = false;
@@ -256,6 +258,25 @@ export default function Dashboard() {
             currentTickers={data?.tickers || []}
             onSubmit={handleCustomTickers}
           />
+
+          {/* Train Confirmation Dialog */}
+          <AlertDialog open={trainConfirmOpen} onOpenChange={setTrainConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Train the AI Agent?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will run 50 training episodes on the cloud GPU in the background.
+                  Inference data will auto-refresh when training completes.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleTrainConfirmed}>
+                  Start Training
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Error Banner */}
           {error && (
