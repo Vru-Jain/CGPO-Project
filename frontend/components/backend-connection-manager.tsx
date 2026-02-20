@@ -138,7 +138,7 @@ const BackendConnectionManager = () => {
                     <DialogHeader>
                         <DialogTitle>Backend Connection</DialogTitle>
                         <DialogDescription>
-                            Enter the URL of your active Colab Backend (ngrok).
+                            Enter the URL of your active Modal Cloud Backend.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -148,10 +148,10 @@ const BackendConnectionManager = () => {
                             <Input
                                 value={tempUrl}
                                 onChange={(e) => setTempUrl(e.target.value)}
-                                placeholder="https://xxxx-xx-xx.ngrok-free.app"
+                                placeholder="https://user--cgpo-backend-serve.modal.run"
                             />
                             <p className="text-xs text-muted-foreground">
-                                Get this from the output of the <b>Colab Notebook</b>.
+                                Get this from the output of the <b>modal deploy</b> command.
                             </p>
                         </div>
 
@@ -159,8 +159,8 @@ const BackendConnectionManager = () => {
                             <div className="text-xs bg-yellow-500/10 text-yellow-500 p-2 rounded flex gap-2">
                                 <WifiOff className="h-4 w-4 shrink-0" />
                                 <p>
-                                    Ensure the Colab runtime is active and the ngrok tunnel is running.
-                                    If using a free ngrok account, the URL changes every restart unless you use a static domain.
+                                    Ensure your Modal container is deployed and running.
+                                    If you redeploy under a different workspace, update the URL here.
                                 </p>
                             </div>
                         )}
