@@ -202,7 +202,7 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: Record
                 ) : (
                     <ChartContainer
                         config={dynamicConfig}
-                        className="aspect-auto h-[250px] w-full"
+                        className="aspect-auto h-[320px] w-full"
                     >
                         <AreaChart data={chartData}>
                             <defs>
