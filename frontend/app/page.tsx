@@ -44,6 +44,9 @@ const PRESETS = {
   "FINANCE": ["JPM", "BAC", "GS", "MS", "V", "MA", "AXP"],
   "HEALTHCARE": ["JNJ", "UNH", "PFE", "ABBV", "MRK", "LLY"],
   "ENERGY": ["XOM", "CVX", "COP", "SLB", "EOG", "PXD"],
+  // Indian Portfolios (NSE via Yahoo Finance .NS suffix)
+  "INDIA BLUECHIPS": ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "HINDUNILVR.NS", "ITC.NS"],
+  "INDIA IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS", "PERSISTENT.NS"],
 };
 
 // ─── Achievement Toast ────────────────────────────────────────────────────────
@@ -325,7 +328,7 @@ export default function Dashboard() {
                             <div
                               key={`${item.ts}-${item.src}-${i}`}
                               className={`p-3 rounded-lg border transition-colors hover:bg-accent/50 ${item.sent === "POS" ? "border-green-500/20" :
-                                  item.sent === "NEG" ? "border-red-500/20" : "border-border"
+                                item.sent === "NEG" ? "border-red-500/20" : "border-border"
                                 }`}
                             >
                               <div className="flex justify-between items-start mb-1.5">
