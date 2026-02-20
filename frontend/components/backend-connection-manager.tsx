@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, Settings, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { apiFetch } from "@/lib/api";
 
 // Context Definition
 interface BackendContextType {
@@ -55,7 +56,7 @@ export const BackendProvider = ({ children }: { children: ReactNode }) => {
     const checkConnection = async (urlToCheck?: string) => {
         const target = urlToCheck || backendUrl;
         try {
-            const res = await fetch(`${target}/health`, { signal: AbortSignal.timeout(3000) });
+            const res = await apiFetch(`${target}/health`, { signal: AbortSignal.timeout(3000) });
             if (res.ok) {
                 setIsConnected(true);
                 return true;

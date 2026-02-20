@@ -99,23 +99,4 @@ class GraphEngine:
         
         return x, edge_index, edge_attr
 
-if __name__ == "__main__":
-    # Test stub
-    # Mock data
-    tickers = ["AAPL", "MSFT", "GOOG"]
-    dates = pd.date_range(start="2023-01-01", periods=100)
-    data = {}
-    for t in tickers:
-        prices = np.random.randn(100).cumsum() + 100
-        data[(t, 'Close')] = prices
-        data[(t, 'Volume')] = np.random.randint(100, 1000, 100)
-        
-    df = pd.DataFrame(data)
-    df.columns = pd.MultiIndex.from_tuples(df.columns)
-    
-    engine = GraphEngine(tickers)
-    x, edge_index, edge_attr = engine.build_graph(df)
-    
-    print("Node Features Shape:", x.shape)
-    print("Edge Index Shape:", edge_index.shape)
-    print("Edges:", edge_index)
+

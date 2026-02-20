@@ -239,9 +239,10 @@ def run_inference():
             nodes.append({"id": t, "return": ret})
             
         # Metrics Calculation
-        # Extract close prices properly for metrics
+        # Extract close prices rapidly
         if isinstance(data.columns, pd.MultiIndex):
-            close_prices = data.xs('Close', level=1, axis=1)
+            close_prices = data.loc[:, (slice(None), 'Close')]
+            close_prices.columns = close_prices.columns.droplevel(1)
         else:
             close_prices = data['Close']
         
@@ -252,7 +253,7 @@ def run_inference():
         port_vol = 0.0
         
         for t, w in weights_dict.items():
-            if t in recent_returns.index:
+            if t in recent_returns:
                 port_ret += w * recent_returns[t]
                 port_vol += w * recent_vol[t]
                 
@@ -384,13 +385,6 @@ def get_training_status():
             "total": state["training_total"],
             "last_reward": state["training_last_reward"],
         }
-
-    # Only log transitions to avoid spamming logs on every poll
-    if status["is_training"]:
-        add_log(
-            "TRACE",
-            f"Training status polled: episode {status['episode']}/{status['total']}, last_reward={status['last_reward']:.4f}",
-        )
 
     return status
 

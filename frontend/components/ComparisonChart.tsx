@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useBackend } from "@/components/backend-connection-manager";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiFetch } from "@/lib/api";
 import {
     ChartConfig,
     ChartContainer,
@@ -59,7 +60,7 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: Record
             const tickerParam = encodeURIComponent(selectedBenchmark.value);
             const benchUrl = `${backendUrl.replace(/\/$/, "")}/market/benchmark?period=${period}&ticker=${tickerParam}`;
 
-            const res = await fetch(benchUrl);
+            const res = await apiFetch(benchUrl);
             if (res.ok) {
                 const data = await res.json();
                 if (!data.benchmarks || Object.keys(data.benchmarks).length === 0) {

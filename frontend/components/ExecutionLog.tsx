@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Activity } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 interface LogEntry {
     id: number;
@@ -39,7 +40,7 @@ export default function ExecutionLog() {
 
         const fetchLogs = async () => {
             try {
-                const res = await fetch(getApiUrl("/system/logs?limit=50"));
+                const res = await apiFetch(getApiUrl("/system/logs?limit=50"));
                 if (!res.ok) {
                     throw new Error(`Backend returned ${res.status}`);
                 }

@@ -56,9 +56,9 @@ class MarketDataLoader:
         # Simple in-memory caches keyed by request parameters
         self._lock = threading.RLock()
         self._history_cache: Dict = {}
-        self._latest_prices_cache: Optional[Dict] = None
+        self._latest_prices_cache: Optional[Dict] = {}
         self._latest_prices_ts: float = 0.0
-        self._news_cache: Optional[List[Dict]] = None
+        self._news_cache: Optional[List[Dict]] = []
         self._news_ts: float = 0.0
         self._benchmark_cache: Dict[str, Dict] = {}
 
@@ -343,11 +343,5 @@ class MarketDataLoader:
         return performance
 
 
-if __name__ == "__main__":
-    # Simple test using only live data (no mock/simulated paths)
-    loader = MarketDataLoader(["AAPL", "MSFT", "NVDA"])
-    df = loader.fetch_history(period="1mo")
-    print(df.head())
-    print("Latest:", loader.get_latest_prices())
-    print("Benchmark:", loader.get_benchmark_performance("1mo"))
+
 

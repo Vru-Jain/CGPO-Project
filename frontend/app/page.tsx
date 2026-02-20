@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { apiFetch } from "@/lib/api";
 
 // TypeScript Interfaces
 interface GraphNode {
@@ -96,7 +97,7 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const infRes = await fetch(getApiUrl("/ai/inference"), {
+      const infRes = await apiFetch(getApiUrl("/ai/inference"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -115,7 +116,7 @@ export default function Dashboard() {
     setTraining(true);
     setTrainingStatus({ episode: 0, total: 50, reward: 0 });
     try {
-      await fetch(getApiUrl("/ai/train"), {
+      await apiFetch(getApiUrl("/ai/train"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ episodes: 50 })
@@ -133,7 +134,7 @@ export default function Dashboard() {
     const poll = async () => {
       if (cancelled) return;
       try {
-        const res = await fetch(getApiUrl("/ai/training-status"));
+        const res = await apiFetch(getApiUrl("/ai/training-status"));
         const status = await res.json();
         if (cancelled) return;
         if (status.is_training) {
@@ -158,7 +159,7 @@ export default function Dashboard() {
   const handleCustomTickers = async (tickers: string[]) => {
     setActivePreset(null);
     setLoading(true);
-    await fetch(getApiUrl("/config/tickers"), {
+    await apiFetch(getApiUrl("/config/tickers"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tickers })
@@ -170,7 +171,7 @@ export default function Dashboard() {
     const tickers = PRESETS[presetName as keyof typeof PRESETS];
     setActivePreset(presetName);
     setLoading(true);
-    await fetch(getApiUrl("/config/tickers"), {
+    await apiFetch(getApiUrl("/config/tickers"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tickers })
@@ -180,7 +181,7 @@ export default function Dashboard() {
 
   const fetchNews = async () => {
     try {
-      const res = await fetch(getApiUrl("/market/news"));
+      const res = await apiFetch(getApiUrl("/market/news"));
       if (res.ok) {
         const newsJson = await res.json();
         setNews(newsJson);

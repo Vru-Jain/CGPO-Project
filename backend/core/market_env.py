@@ -173,26 +173,4 @@ class MarketGraphEnv(gym.Env):
         return observation, reward, terminated, truncated, info
 
 
-if __name__ == "__main__":
-    # Test stub
-    tickers = ["AAPL", "MSFT"]
-    # Create dummy data
-    dates = pd.date_range("2023-01-01", periods=100)
-    data_dict = {}
-    for t in tickers:
-        data_dict[(t, 'Close')] = np.random.uniform(100, 150, 100)
-        data_dict[(t, 'Open')] = np.random.uniform(100, 150, 100)
-        data_dict[(t, 'High')] = np.random.uniform(100, 150, 100)
-        data_dict[(t, 'Low')] = np.random.uniform(100, 150, 100)
-        data_dict[(t, 'Volume')] = np.random.uniform(1000, 5000, 100)
-    
-    df = pd.DataFrame(data_dict)
-    df.columns = pd.MultiIndex.from_tuples(df.columns)
-    
-    env = MarketGraphEnv(tickers, df)
-    obs, _ = env.reset()
-    print("Obs X shape:", obs['x'].shape)
-    
-    action = env.action_space.sample()
-    obs, reward, term, trunc, info = env.step(action)
-    print(f"Step Reward: {reward:.4f}, Portfolio: {info['portfolio_value']:.2f}")
+
