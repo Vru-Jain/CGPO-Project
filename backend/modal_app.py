@@ -15,8 +15,10 @@ image = (
 @app.function(
     image=image,
     gpu="T4",
-    keep_warm=0
+    concurrency_limit=1,
+    min_containers=0
 )
+@modal.concurrent(max_inputs=100)
 @modal.asgi_app()
 def serve():
     # Inject the directory into Python's path so it can find main.py and core/
