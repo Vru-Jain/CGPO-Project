@@ -1,16 +1,17 @@
 /**
  * Central fetch wrapper for all CGPO API calls.
- * Automatically injects the Modal bypass header (prevents 303 redirect loops
- * on cold-start) and enforces a sensible request timeout.
+ * Injects the Modal bypass header, API key, and enforces a 15-second timeout.
  */
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
+
 export async function apiFetch(
     input: RequestInfo | URL,
     init?: RequestInit
 ): Promise<Response> {
     const headers = new Headers(init?.headers);
     headers.set("X-Modal-Bypass-Interstitial", "true");
+    if (API_KEY) headers.set("X-API-Key", API_KEY);
 
-    // Default 15-second timeout — prevents silent hangs when the GPU is warming up
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15_000);
 

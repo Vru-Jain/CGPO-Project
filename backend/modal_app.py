@@ -16,7 +16,8 @@ image = (
     image=image,
     gpu="T4",
     concurrency_limit=1,
-    min_containers=0
+    min_containers=0,
+    secrets=[modal.Secret.from_name("cgpo-secrets")],
 )
 @modal.concurrent(max_inputs=100)
 @modal.asgi_app()

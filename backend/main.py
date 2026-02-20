@@ -29,7 +29,7 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=False,   # Must be False when allow_origins=["*"]
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-Modal-Bypass-Interstitial"],
+    allow_headers=["Content-Type", "X-Modal-Bypass-Interstitial", "X-API-Key"],
 )
 
 # ── Security Headers ──────────────────────────────────────────────────────────
@@ -41,6 +41,23 @@ async def add_security_headers(request: Request, call_next) -> Response:
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Cache-Control"] = "no-store"
     return response
+
+# ── API Key Authentication ────────────────────────────────────────────────────
+# Set CGPO_API_KEY in Modal secrets to enforce auth. If unset, auth is skipped.
+EXEMPT_PATHS = {"/", "/health", "/docs", "/openapi.json"}
+_API_KEY = os.getenv("CGPO_API_KEY", "")
+
+@app.middleware("http")
+async def verify_api_key(request: Request, call_next) -> Response:
+    if _API_KEY and request.url.path not in EXEMPT_PATHS:
+        provided = request.headers.get("X-API-Key", "")
+        if provided != _API_KEY:
+            return Response(
+                content='{"detail":"Invalid or missing API key"}',
+                status_code=401,
+                media_type="application/json",
+            )
+    return await call_next(request)
 
 # Global State (InMemory for prototype consistency)
 state = {
