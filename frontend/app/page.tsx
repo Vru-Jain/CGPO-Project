@@ -233,7 +233,7 @@ export default function Dashboard() {
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* ── Left Sidebar ── */}
+      {/* ── Left Sidebar (responsive) ── */}
       <Sidebar
         onRefresh={fetchInference}
         onTrain={startTraining}
@@ -250,7 +250,8 @@ export default function Dashboard() {
 
       {/* ── Main Content ── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6 space-y-6">
+        {/* pb-20 on mobile = space above FAB button */}
+        <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-4 md:space-y-6">
           {/* Ticker Modal */}
           <TickerModal
             open={tickerModalOpen}
@@ -292,10 +293,10 @@ export default function Dashboard() {
           {data?.metrics && <MetricsPanel metrics={data.metrics} />}
 
           {/* ── Main Grid ── */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 md:gap-6">
 
-            {/* Left Column: Graph + Logs (7 cols) */}
-            <div className="xl:col-span-7 space-y-6">
+            {/* Left Column: Graph + Logs (7 cols on xl, full on md, full on mobile) */}
+            <div className="md:col-span-2 xl:col-span-7 space-y-4 md:space-y-6">
               <Card className="overflow-hidden">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -303,7 +304,7 @@ export default function Dashboard() {
                     Neural Asset Graph
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-0 h-[520px]">
+                <CardContent className="p-0 h-[340px] md:h-[420px] xl:h-[520px]">
                   {data ? (
                     <GraphModule data={data.graph} />
                   ) : (
@@ -315,15 +316,15 @@ export default function Dashboard() {
               </Card>
 
               {/* Execution Log */}
-              <div className="h-[220px]">
+              <div className="h-[180px] md:h-[220px]">
                 <ExecutionLog />
               </div>
             </div>
 
-            {/* Right Column: Benchmark Chart + News (5 cols) */}
-            <div className="xl:col-span-5 space-y-6">
-              {/* Bigger Comparison Chart */}
-              <div className="h-[460px]">
+            {/* Right Column: Benchmark Chart + News (5 cols on xl, full on md, full on mobile) */}
+            <div className="md:col-span-2 xl:col-span-5 space-y-4 md:space-y-6">
+              {/* Comparison Chart */}
+              <div className="h-[380px] md:h-[420px] xl:h-[460px]">
                 <ComparisonChart agentWeights={data?.weights} />
               </div>
 
