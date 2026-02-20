@@ -74,7 +74,7 @@ export const BackendProvider = ({ children }: { children: ReactNode }) => {
     // Periodic heartbeat
     useEffect(() => {
         checkConnection();
-        const interval = setInterval(() => checkConnection(), 10000); // Check every 10s
+        const interval = setInterval(() => checkConnection(), 60000); // Check every 60s to preserve cloud credits
         return () => clearInterval(interval);
     }, [backendUrl]);
 
