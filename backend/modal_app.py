@@ -15,7 +15,7 @@ image = (
 @app.function(
     image=image,
     gpu="T4",
-    concurrency_limit=1,
+    max_containers=1,
     min_containers=0,
     secrets=[modal.Secret.from_name("cgpo-secrets")],
 )

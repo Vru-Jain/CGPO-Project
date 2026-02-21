@@ -278,13 +278,14 @@ class MarketDataLoader:
         for bench in benchmarks:
             try:
                 if is_multi_index:
-                    if bench in data:
-                        # yfinance returns (Ticker, Column)
+                    if bench in data.columns.get_level_values(0):
                         df_bench = data[bench]
-                        close = df_bench["Close"] if "Close" in df_bench else df_bench.iloc[:, 0]
+                    elif bench in data.columns.get_level_values(1):
+                        df_bench = data.xs(bench, level=1, axis=1)
                     else:
                         print(f"Warning: {bench} not in multi-index columns")
                         continue
+                    close = df_bench["Close"] if "Close" in df_bench else df_bench.iloc[:, 0]
                 else:
                     # Flat DataFrame
                     # If we asked for 1 ticker, this is it.

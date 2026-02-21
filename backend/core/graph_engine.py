@@ -30,7 +30,15 @@ class GraphEngine:
         n_tickers = len(self.tickers)
         
         # Calculate returns
-        close_prices = market_data.xs('Close', level=1, axis=1) if isinstance(market_data.columns, pd.MultiIndex) else market_data['Close']
+        if isinstance(market_data.columns, pd.MultiIndex):
+            if 'Close' in market_data.columns.get_level_values(0):
+                close_prices = market_data['Close']
+            elif 'Close' in market_data.columns.get_level_values(1):
+                close_prices = market_data.xs('Close', level=1, axis=1)
+            else:
+                close_prices = market_data.iloc[:, 0]
+        else:
+            close_prices = market_data['Close'] if 'Close' in market_data else market_data.iloc[:, 0]
         
         # Make sure we have enough data
         if len(close_prices) < window_size:

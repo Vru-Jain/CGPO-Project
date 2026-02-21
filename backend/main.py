@@ -49,7 +49,7 @@ _API_KEY = os.getenv("CGPO_API_KEY", "")
 
 @app.middleware("http")
 async def verify_api_key(request: Request, call_next) -> Response:
-    if _API_KEY and request.url.path not in EXEMPT_PATHS:
+    if _API_KEY and request.url.path not in EXEMPT_PATHS and request.method != "OPTIONS":
         provided = request.headers.get("X-API-Key", "")
         if provided != _API_KEY:
             return Response(
@@ -259,10 +259,14 @@ def run_inference():
         # Metrics Calculation
         # Extract close prices rapidly
         if isinstance(data.columns, pd.MultiIndex):
-            close_prices = data.loc[:, (slice(None), 'Close')]
-            close_prices.columns = close_prices.columns.droplevel(1)
+            if 'Close' in data.columns.get_level_values(0):
+                close_prices = data['Close']
+            elif 'Close' in data.columns.get_level_values(1):
+                close_prices = data.xs('Close', level=1, axis=1)
+            else:
+                close_prices = data.iloc[:, 0]
         else:
-            close_prices = data['Close']
+            close_prices = data['Close'] if 'Close' in data else data.iloc[:, 0]
         
         recent_returns = close_prices.pct_change().tail(20).mean() * 252
         recent_vol = close_prices.pct_change().tail(20).std() * np.sqrt(252)
