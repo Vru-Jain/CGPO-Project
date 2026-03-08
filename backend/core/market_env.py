@@ -49,10 +49,12 @@ class MarketGraphEnv(gym.Env):
         """Load benchmark returns aligned with data index."""
         try:
             bench_data = yf.download(self.benchmark, period="1y", interval="1d", auto_adjust=True, progress=False)
+            if bench_data.empty:
+                raise ValueError(f"No benchmark data returned for {self.benchmark}")
             self.benchmark_prices = bench_data['Close']
             self.benchmark_daily_returns = bench_data['Close'].pct_change().fillna(0)
-        except:
-            # Fallback: use equal-weight portfolio as benchmark
+        except Exception as e:
+            print(f"[Warning] Benchmark load failed for {self.benchmark}: {e}")
             self.benchmark_prices = None
             self.benchmark_daily_returns = None
 
@@ -93,8 +95,8 @@ class MarketGraphEnv(gym.Env):
                 # Ensure scalar return (handle Series case)
                 ret = (price_t1 - price_t) / price_t
                 return float(ret.iloc[0]) if hasattr(ret, 'iloc') else float(ret)
-        except:
-            pass
+        except (KeyError, IndexError, TypeError) as e:
+            pass  # Date not found in benchmark — return 0.0 below
         
         return 0.0
 

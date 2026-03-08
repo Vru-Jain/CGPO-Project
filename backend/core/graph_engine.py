@@ -51,14 +51,17 @@ class GraphEngine:
         # Current features based on the last window
         window_closes = close_prices.iloc[-window_size:]
         
+        # Pre-fill missing data for clean pct_change (avoids deprecated fill_method warning)
+        filled_closes = window_closes.ffill()
+
         # Feature 1: Returns (last step)
-        returns = window_closes.pct_change().iloc[-1].fillna(0).values
+        returns = filled_closes.pct_change().iloc[-1].fillna(0).values
         
         # Feature 2: Volatility (std dev of returns over window)
-        volatility = window_closes.pct_change().std().fillna(0).values
+        volatility = filled_closes.pct_change().std().fillna(0).values
         
         # Feature 3: Momentum (total return over window)
-        momentum = (window_closes.iloc[-1] / window_closes.iloc[0] - 1).fillna(0).values
+        momentum = (filled_closes.iloc[-1] / filled_closes.iloc[0] - 1).fillna(0).values
 
         # Feature 4: RSI (Relative Strength Index)
         rsi_values = []
@@ -77,7 +80,7 @@ class GraphEngine:
         x = torch.tensor(x, dtype=torch.float32, device=self.device)
         
         # 2. Compute Edges (Correlation with k-NN guarantee)
-        corr_matrix = window_closes.pct_change().corr().fillna(0).values
+        corr_matrix = filled_closes.pct_change().corr().fillna(0).values
         abs_corr = np.abs(corr_matrix)
         
         # Use threshold but guarantee min_neighbors via k-NN fallback

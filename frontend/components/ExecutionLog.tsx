@@ -63,7 +63,7 @@ export default function ExecutionLog() {
             cancelled = true;
             clearInterval(interval);
         };
-    }, []);
+    }, [backendUrl]);
 
     useEffect(() => {
         if (scrollRef.current) {

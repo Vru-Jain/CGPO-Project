@@ -268,21 +268,22 @@ def run_inference():
         else:
             close_prices = data['Close'] if 'Close' in data else data.iloc[:, 0]
         
-        recent_returns = close_prices.pct_change().tail(20).mean() * 252
-        recent_vol = close_prices.pct_change().tail(20).std() * np.sqrt(252)
+        recent_returns = close_prices.pct_change().tail(20)
         
-        port_ret = 0.0
-        port_vol = 0.0
+        # Portfolio expected return (annualized)
+        mean_daily_returns = recent_returns.mean()
+        port_ret = sum(weights_dict.get(t, 0) * mean_daily_returns.get(t, 0) for t in weights_dict) * 252
         
-        for t, w in weights_dict.items():
-            if t in recent_returns:
-                port_ret += w * recent_returns[t]
-                port_vol += w * recent_vol[t]
+        # Portfolio volatility (annualized) using covariance matrix for accurate diversification
+        weight_arr = np.array([weights_dict.get(t, 0) for t in close_prices.columns])
+        cov_matrix = recent_returns.cov().fillna(0).values
+        port_var = float(np.dot(weight_arr, np.dot(cov_matrix, weight_arr)))
+        port_vol = float(np.sqrt(max(port_var, 0)) * np.sqrt(252))
                 
         metrics = {
-            "expected_return": float(port_ret),
-            "volatility": float(port_vol),
-            "sharpe_ratio": float(port_ret / port_vol) if port_vol > 0 else 0.0
+            "expected_return": float(port_ret) if np.isfinite(port_ret) else 0.0,
+            "volatility": port_vol if np.isfinite(port_vol) else 0.0,
+            "sharpe_ratio": float(port_ret / port_vol) if port_vol > 0 and np.isfinite(port_ret) else 0.0
         }
 
         add_log("SUCCESS", "Inference completed successfully")
