@@ -9,12 +9,17 @@ import MetricsPanel from "@/components/MetricsPanel";
 import ExecutionLog from "@/components/ExecutionLog";
 import Sidebar from "@/components/Sidebar";
 import TickerModal from "@/components/TickerModal";
+import TutorialModal from "@/components/TutorialModal";
+import AgentInsights from "@/components/AgentInsights";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { apiFetch } from "@/lib/api";
+import { useTutorial } from "@/hooks/useTutorial";
+import { useAgentInsights } from "@/hooks/useAgentInsights";
+import { useMarketRegion } from "@/hooks/useMarketRegion";
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -40,15 +45,20 @@ interface TrainingStatus { episode: number; total: number; reward: number; }
 // ─── Presets ─────────────────────────────────────────────────────────────────
 
 const PRESETS = {
+  // ── US Markets ──
   "TECH GIANTS": ["AAPL", "NVDA", "MSFT", "GOOG", "AMZN", "META", "TSLA"],
-  "CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD", "DOGE-USD", "ADA-USD"],
   "FINANCE": ["JPM", "BAC", "GS", "MS", "V", "MA", "AXP"],
   "HEALTHCARE": ["JNJ", "UNH", "PFE", "ABBV", "MRK", "LLY"],
   "ENERGY": ["XOM", "CVX", "COP", "SLB", "EOG", "PXD"],
-  // Indian Portfolios (NSE via Yahoo Finance .NS suffix)
+  // ── Indian Markets (NSE via Yahoo Finance .NS suffix) ──
   "INDIA BLUECHIPS": ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "HINDUNILVR.NS", "ITC.NS"],
   "INDIA IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS", "PERSISTENT.NS"],
 };
+
+const PRESET_GROUPS: { label: string; presets: string[] }[] = [
+  { label: "US Markets", presets: ["TECH GIANTS", "FINANCE", "HEALTHCARE", "ENERGY"] },
+  { label: "Indian Markets", presets: ["INDIA BLUECHIPS", "INDIA IT"] },
+];
 
 // ─── Achievement Toast ────────────────────────────────────────────────────────
 
@@ -85,6 +95,11 @@ export default function Dashboard() {
   const [tickerModalOpen, setTickerModalOpen] = useState(false);
   const [showAchievement, setShowAchievement] = useState(false);
   const [trainConfirmOpen, setTrainConfirmOpen] = useState(false);
+
+  // Custom hooks
+  const { showTutorial, tutorialStep, completeTutorial, replayTutorial, nextStep, prevStep } = useTutorial();
+  const agentInsights = useAgentInsights(data?.weights, data?.graph?.nodes);
+  const marketRegion = useMarketRegion(data?.tickers);
 
   const loadingRef = useRef(loading);
   const trainingRef = useRef(training);
@@ -239,12 +254,14 @@ export default function Dashboard() {
         onTrain={startTraining}
         onConfigTickers={() => setTickerModalOpen(true)}
         onLoadPreset={loadPreset}
+        onReplayTutorial={replayTutorial}
         loading={loading}
         training={training}
         trainingStatus={trainingStatus}
         tickerCount={data?.tickers?.length}
         activePreset={activePreset}
         presets={PRESETS}
+        presetGroups={PRESET_GROUPS}
         isConnected={isConnected}
       />
 
@@ -321,11 +338,16 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Right Column: Benchmark Chart + News (5 cols on xl, full on md, full on mobile) */}
+            {/* Right Column: Benchmark Chart + Agent Insights + News (5 cols on xl) */}
             <div className="md:col-span-2 xl:col-span-5 space-y-4 md:space-y-6">
               {/* Comparison Chart */}
               <div className="h-[380px] md:h-[420px] xl:h-[460px]">
-                <ComparisonChart agentWeights={data?.weights} />
+                <ComparisonChart agentWeights={data?.weights} marketRegion={marketRegion} />
+              </div>
+
+              {/* Agent Insights (XAI) */}
+              <div className="h-[340px]">
+                <AgentInsights data={agentInsights} loading={loading} />
               </div>
 
               {/* Signal Intelligence */}
@@ -377,6 +399,16 @@ export default function Dashboard() {
       {/* ── Achievement Toast ── */}
       {showAchievement && (
         <AchievementToast onClose={() => setShowAchievement(false)} />
+      )}
+
+      {/* ── Tutorial Modal ── */}
+      {showTutorial && (
+        <TutorialModal
+          step={tutorialStep}
+          onNext={nextStep}
+          onPrev={prevStep}
+          onClose={completeTutorial}
+        />
       )}
     </div>
   );

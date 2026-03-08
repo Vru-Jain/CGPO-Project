@@ -13,6 +13,7 @@ import {
     ChartLegend,
     ChartLegendContent
 } from "@/components/ui/chart";
+import type { MarketRegion } from "@/hooks/useMarketRegion";
 
 interface BenchmarkData {
     [key: string]: { total_return: number; cumulative: number[]; dates: string[] };
@@ -41,7 +42,13 @@ const chartConfig = {
     },
 } satisfies ChartConfig;
 
-export default function ComparisonChart({ agentWeights }: { agentWeights: Record<string, number> | undefined }) {
+export default function ComparisonChart({
+    agentWeights,
+    marketRegion = "US",
+}: {
+    agentWeights: Record<string, number> | undefined;
+    marketRegion?: MarketRegion;
+}) {
     const [period, setPeriod] = useState("3mo");
     const [selectedBenchmark, setSelectedBenchmark] = useState(BENCHMARKS[0]);
     const [isPeriodDropdownOpen, setIsPeriodDropdownOpen] = useState(false);
@@ -51,6 +58,17 @@ export default function ComparisonChart({ agentWeights }: { agentWeights: Record
     const [loading, setLoading] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const { backendUrl } = useBackend();
+
+    // Auto-select benchmark based on market region
+    useEffect(() => {
+        if (marketRegion === "IN") {
+            const nifty = BENCHMARKS.find((b) => b.value === "^NSEI");
+            if (nifty) setSelectedBenchmark(nifty);
+        } else {
+            const sp500 = BENCHMARKS.find((b) => b.value === "^GSPC");
+            if (sp500) setSelectedBenchmark(sp500);
+        }
+    }, [marketRegion]);
 
     const fetchBenchmark = useCallback(async () => {
         setLoading(true);

@@ -17,6 +17,7 @@ import {
     Play,
     Brain,
     Sliders,
+    HelpCircle,
 } from "lucide-react";
 
 interface TrainingStatus {
@@ -30,20 +31,22 @@ interface SidebarProps {
     onTrain: () => void;
     onConfigTickers: () => void;
     onLoadPreset: (preset: string) => void;
+    onReplayTutorial: () => void;
     loading: boolean;
     training: boolean;
     trainingStatus: TrainingStatus | null;
     tickerCount?: number;
     activePreset: string | null;
     presets: Record<string, string[]>;
+    presetGroups: { label: string; presets: string[] }[];
     isConnected: boolean;
 }
 
 export default function Sidebar(props: SidebarProps) {
     const {
-        onRefresh, onTrain, onConfigTickers, onLoadPreset,
+        onRefresh, onTrain, onConfigTickers, onLoadPreset, onReplayTutorial,
         loading, training, trainingStatus, tickerCount,
-        activePreset, presets, isConnected,
+        activePreset, presets, presetGroups, isConnected,
     } = props;
 
     // Mobile drawer open state 
@@ -185,37 +188,53 @@ export default function Sidebar(props: SidebarProps) {
                 {!collapsed && (
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1 mb-2">Presets</p>
                 )}
-                <div className="space-y-1">
-                    {Object.keys(presets).map((preset) =>
-                        collapsed ? (
-                            <button
-                                key={preset}
-                                onClick={() => onLoadPreset(preset)}
-                                title={preset}
-                                className={`w-full flex justify-center p-2 rounded-md transition-colors ${activePreset === preset ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}
-                            >
-                                <Zap className="h-3.5 w-3.5" />
-                            </button>
-                        ) : (
-                            <button
-                                key={preset}
-                                onClick={() => { onLoadPreset(preset); onClose?.(); }}
-                                className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-md text-sm transition-colors ${activePreset === preset ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Zap className="h-3.5 w-3.5 shrink-0" />
-                                    {preset}
-                                </div>
-                                <ChevronRight className="h-3.5 w-3.5 opacity-50 shrink-0" />
-                            </button>
-                        )
-                    )}
+                <div className="space-y-3">
+                    {presetGroups.map((group) => (
+                        <div key={group.label}>
+                            {!collapsed && (
+                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-1 mb-1">{group.label}</p>
+                            )}
+                            <div className="space-y-0.5">
+                                {group.presets.map((preset) =>
+                                    collapsed ? (
+                                        <button
+                                            key={preset}
+                                            onClick={() => onLoadPreset(preset)}
+                                            title={preset}
+                                            className={`w-full flex justify-center p-2 rounded-md transition-colors ${activePreset === preset ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}
+                                        >
+                                            <Zap className="h-3.5 w-3.5" />
+                                        </button>
+                                    ) : (
+                                        <button
+                                            key={preset}
+                                            onClick={() => { onLoadPreset(preset); onClose?.(); }}
+                                            className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-md text-sm transition-colors ${activePreset === preset ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Zap className="h-3.5 w-3.5 shrink-0" />
+                                                {preset}
+                                            </div>
+                                            <ChevronRight className="h-3.5 w-3.5 opacity-50 shrink-0" />
+                                        </button>
+                                    )
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
 
             {/* Footer */}
             {!collapsed && (
-                <div className="p-4 border-t shrink-0">
+                <div className="p-4 border-t shrink-0 space-y-2">
+                    <button
+                        onClick={() => { onReplayTutorial(); onClose?.(); }}
+                        className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
+                    >
+                        <HelpCircle className="h-3.5 w-3.5 shrink-0" />
+                        Help / Replay Tutorial
+                    </button>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                         <span>CGPO v2.0 · Modal Cloud</span>
