@@ -1,7 +1,5 @@
 # CGPO UML Diagrams (Mermaid)
 
-Copy and paste these blocks into [Mermaid Live](https://mermaid.live) to generate the diagrams for your Blackbook.
-
 ## 1. Deployment Diagram
 Shows the physical cloud infrastructure: User Browser → Vercel CDN → Modal GPU.
 
