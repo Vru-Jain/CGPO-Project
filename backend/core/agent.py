@@ -7,6 +7,12 @@ import numpy as np
 
 from core.models import GNNPolicy
 
+# Model weights are written here. On Modal this points at a mounted Volume
+# (set via CGPO_MODEL_DIR) so the trained model survives container cold starts;
+# locally it falls back to the repo-relative "models" directory.
+MODEL_DIR = os.getenv("CGPO_MODEL_DIR", "models")
+
+
 class Agent:
     def __init__(self, num_features, num_assets, lr=0.001, gamma=0.99, entropy_coef=0.01):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -124,12 +130,14 @@ class Agent:
                 
         return all_rewards
 
-    def save_model(self, path="models/agent.pth"):
+    def save_model(self, path=None):
+        path = path or os.path.join(MODEL_DIR, "agent.pth")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(self.policy.state_dict(), path)
         print(f"Model saved to {path}")
 
-    def load_model(self, path="models/agent.pth"):
+    def load_model(self, path=None):
+        path = path or os.path.join(MODEL_DIR, "agent.pth")
         if os.path.exists(path):
             self.policy.load_state_dict(torch.load(path, map_location=self.device))
             self.policy.eval()

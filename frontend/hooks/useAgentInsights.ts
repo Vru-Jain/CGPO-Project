@@ -33,10 +33,13 @@ export function useAgentInsights(
         const entries = Object.entries(weights).sort((a, b) => b[1] - a[1]);
         const totalAssets = entries.length;
 
-        // Detect untrained: weights are nearly uniform (spread < 2%)
+        // Detect untrained: weights are essentially uniform (spread < 0.5%).
+        // A partially-trained but conservative agent can still shift weights by
+        // 1-2%, so the threshold is kept strict to avoid mislabelling it as
+        // "untrained" and hiding its real reasoning.
         const allWeights = entries.map(([, w]) => w);
         const spread = Math.max(...allWeights) - Math.min(...allWeights);
-        const isUntrained = spread < 0.02;
+        const isUntrained = spread < 0.005;
 
         // Build a quick lookup for node-level returns
         const returnMap: Record<string, number> = {};

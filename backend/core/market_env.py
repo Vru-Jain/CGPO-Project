@@ -134,23 +134,19 @@ class MarketGraphEnv(gym.Env):
         self.agent_returns.append(port_return)
         self.benchmark_returns.append(bench_return)
         
-        # REWARD = EXCESS RETURN OVER BENCHMARK
-        # Agent is rewarded for beating SPY, penalized for underperforming
+        # REWARD = RISK-ADJUSTED EXCESS RETURN OVER BENCHMARK
+        # Agent is rewarded for beating SPY, penalized for underperforming.
         excess_return = port_return - bench_return
         reward = excess_return * 100  # Scale for learning
-        
-        # Volatility Penalty
-        # Penalty if portfolio return is too far from mean (simple proxy for volatility on single step)
-        # Better: Uses window standard deviation if available, but for now single step penalty:
-        reward -= 50.0 * np.abs(port_return) # Penalize large swings? No that penalizes upside too.
-        
-        # New Reward: Sharpe-like
-        # Reward = Return - 0.1 * Volatility
-        # We need historical volatility.
+
+        # Volatility penalty: penalise sustained dispersion of portfolio returns
+        # over a trailing window. This discourages erratic allocations without
+        # punishing captured upside (the previous abs(port_return) term penalised
+        # every move, so the agent learned to stay uniform — that is removed).
         if len(self.agent_returns) > 20:
-             recent_vol = np.std(self.agent_returns[-20:])
-             reward -= recent_vol * 10.0 # Penalty for high volatility
-        
+            recent_vol = np.std(self.agent_returns[-20:])
+            reward -= recent_vol * 10.0
+
         # Bonus for consistent outperformance
         if len(self.agent_returns) > 5:
             recent_excess = np.mean(self.agent_returns[-5:]) - np.mean(self.benchmark_returns[-5:])

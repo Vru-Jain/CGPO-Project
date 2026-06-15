@@ -89,6 +89,23 @@ _LOG_LOCK = threading.RLock()
 _LOG_MAX_LEN = 200
 
 
+def commit_model_volume() -> None:
+    """
+    Persist the trained model to the Modal Volume so it survives container cold
+    starts. No-op when not running on Modal (e.g. local uvicorn), where the
+    model is written to the repo-relative models/ directory instead.
+    """
+    vol_name = os.getenv("CGPO_MODEL_VOLUME")
+    if not vol_name:
+        return
+    try:
+        import modal
+        modal.Volume.from_name(vol_name).commit()
+        add_log("INFO", "Model volume committed — weights persisted")
+    except Exception as e:  # noqa: BLE001 — best-effort persistence
+        add_log("WARN", f"Model volume commit failed: {e}")
+
+
 def add_log(log_type: LogType, message: str) -> None:
     """Append a log entry to the in-memory ring buffer."""
     record = LogRecord(
@@ -367,7 +384,16 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
                 critic_loss = F.mse_loss(val.squeeze(), torch.tensor(R, device=agent.device))
                 entropy_loss = -agent.entropy_coef * ent.mean()
                 loss += actor_loss + 0.5 * critic_loss + entropy_loss
-            
+
+            # NaN guard: skip unstable updates. The trained model is now persisted
+            # to a Volume, so a single NaN/Inf step would otherwise poison the
+            # saved weights and be reloaded on every subsequent cold start.
+            if torch.isnan(loss) or torch.isinf(loss):
+                add_log("WARN", f"Episode {ep+1}: skipped unstable update (NaN/Inf loss)")
+                with state_lock:
+                    state["training_episode"] = ep + 1
+                continue
+
             agent.optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(agent.policy.parameters(), max_norm=0.5)
@@ -384,6 +410,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
             print(f"Episode {ep+1}/{payload.episodes}: Reward: {total_reward:.4f}")
         
         agent.save_model()
+        commit_model_volume()
         with state_lock:
             state["is_training"] = False
         add_log("SUCCESS", "Training complete — model saved")
