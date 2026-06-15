@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
-
 @import "tailwindcss";
 
 :root {
@@ -94,6 +92,127 @@ body {
 .neo-card:hover {
   border-color: hsl(var(--primary));
   box-shadow: 0 0 15px hsl(var(--primary) / 0.15);
+}
+
+/* Subtle dot grid pattern */
+.bg-grid {
+  background-image: radial-gradient(circle, hsl(var(--primary) / 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Lightweight gradient orb — uses opacity animation instead of transform+blur */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 6s ease-in-out infinite;
+  will-change: opacity;
+}
+
+/* Gradient text utility */
+.text-gradient {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(217 91% 75%), hsl(280 70% 65%));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gradient border card */
+.card-glow {
+  position: relative;
+  overflow: hidden;
+}
+.card-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, transparent 40%, hsl(var(--primary) / 0.3) 50%, transparent 60%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.card-glow:hover::before {
+  opacity: 1;
+}
+
+/* Lightweight shine — background-position shift instead of pseudo-element */
+.card-shine {
+  background-size: 200% 100%;
+  background-image: linear-gradient(
+    115deg,
+    transparent 45%,
+    hsl(var(--primary) / 0.03) 50%,
+    transparent 55%
+  );
+  background-position: 100% 0;
+  transition: background-position 0.5s ease;
+}
+.card-shine:hover {
+  background-position: 0 0;
+}
+
+/* Metric card top accent bar */
+.metric-accent {
+  position: relative;
+}
+.metric-accent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+.metric-accent-green::before {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+.metric-accent-blue::before {
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(217 91% 75%));
+}
+.metric-accent-red::before {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+/* Fade-in-up animation for scroll reveals */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+/* Staggered delays */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .animate-ping {
+    animation: none;
+    opacity: 1;
+  }
+  .animate-glow-pulse {
+    animation: none;
+    opacity: 0.6;
+  }
+  .delay-100, .delay-200, .delay-300, .delay-400, .delay-500 {
+    animation-delay: 0ms;
+  }
 }
 
 /* Loading spinner animation */

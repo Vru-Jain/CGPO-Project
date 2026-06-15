@@ -269,7 +269,7 @@ export default function Sidebar(props: SidebarProps) {
             </div>
 
             {/* ── Tablet: icon-only strip / Desktop: full panel ─────────────────── */}
-            <aside className={`hidden md:flex flex-col h-screen sticky top-0 border-r bg-card transition-all duration-300 shrink-0 ${collapsed ? "w-14" : "w-64"}`}>
+            <aside className={`hidden md:flex flex-col h-screen sticky top-0 border-r border-border/50 bg-card transition-all duration-300 shrink-0 ${collapsed ? "w-14" : "w-64"}`}>
                 <SidebarContent />
             </aside>
         </>

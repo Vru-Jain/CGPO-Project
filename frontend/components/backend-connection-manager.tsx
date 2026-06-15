@@ -30,17 +30,14 @@ export const useBackend = () => {
 
 // Provider Component
 export const BackendProvider = ({ children }: { children: ReactNode }) => {
-    // Modal Cloud Backend URL
-    const defaultUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://vrushabhjain2016--cgpo-backend-serve.modal.run";
+    const defaultUrl = "/py-api";
     const [backendUrl, setBackendUrlState] = useState(defaultUrl);
     const [isConnected, setIsConnected] = useState(false);
 
-    // Initialize from LocalStorage
     useEffect(() => {
         if (typeof window !== "undefined") {
             const stored = localStorage.getItem("cgpo_backend_url");
-            // If the user has an old ngrok URL saved, ignore it so we use Modal
-            if (stored && !stored.includes("ngrok")) {
+            if (stored && !stored.includes("ngrok") && !stored.includes("modal.run")) {
                 setBackendUrlState(stored);
             }
         }
@@ -116,7 +113,7 @@ const BackendConnectionManager = () => {
     return (
         <>
             <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
-                <Card className="shadow-lg border-opacity-50 backdrop-blur-sm bg-background/80">
+                <Card className="shadow-lg border-opacity-50 bg-card">
                     <CardContent className="p-2 flex items-center gap-2">
                         <Badge
                             variant={isConnected ? "default" : "destructive"}

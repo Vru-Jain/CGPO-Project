@@ -50,13 +50,13 @@ export default function TutorialModal({ step, onNext, onPrev, onClose }: Tutoria
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                className="absolute inset-0 bg-black/70"
                 onClick={onClose}
             />
 
             {/* Modal */}
             <div className="relative z-10 w-[90vw] max-w-lg mx-auto animate-in zoom-in-95 fade-in duration-300">
-                <div className="rounded-2xl border border-border/50 bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden">
+                <div className="rounded-2xl border border-border/50 bg-card shadow-2xl overflow-hidden">
                     {/* Header */}
                     <div className="flex items-center justify-between px-6 pt-5 pb-3">
                         <div className="flex items-center gap-2">

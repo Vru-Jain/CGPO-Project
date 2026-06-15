@@ -13,6 +13,7 @@ export interface AgentInsightsData {
     topPicks: InsightItem[];
     reductions: InsightItem[];
     totalAssets: number;
+    isUntrained: boolean;
 }
 
 /**
@@ -32,16 +33,27 @@ export function useAgentInsights(
         const entries = Object.entries(weights).sort((a, b) => b[1] - a[1]);
         const totalAssets = entries.length;
 
+        // Detect untrained: weights are nearly uniform (spread < 2%)
+        const allWeights = entries.map(([, w]) => w);
+        const spread = Math.max(...allWeights) - Math.min(...allWeights);
+        const isUntrained = spread < 0.02;
+
         // Build a quick lookup for node-level returns
         const returnMap: Record<string, number> = {};
         graphNodes?.forEach((n) => {
             returnMap[n.id] = n.return;
         });
 
-        // Average weight for comparison
         const avgWeight = 1 / totalAssets;
 
         const makeReason = (ticker: string, weight: number): string => {
+            if (isUntrained) {
+                const ret = returnMap[ticker];
+                if (ret !== undefined && ret > 0.005) return "Positive recent momentum";
+                if (ret !== undefined && ret < -0.005) return "Negative recent trend";
+                return "Equal weight — train to differentiate";
+            }
+
             const ret = returnMap[ticker];
             const isHeavy = weight > avgWeight * 1.5;
             const isLight = weight < avgWeight * 0.5;
@@ -78,6 +90,6 @@ export function useAgentInsights(
                 reason: makeReason(ticker, w),
             }));
 
-        return { topPicks, reductions, totalAssets };
+        return { topPicks, reductions, totalAssets, isUntrained };
     }, [weights, graphNodes]);
 }

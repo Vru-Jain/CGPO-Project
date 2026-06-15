@@ -1,10 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone", // For Docker deployment
+  output: "standalone",
   async rewrites() {
-    // Use environment variable for backend URL, fallback to localhost for dev
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://vrushabhjain2016--cgpo-backend-serve.modal.run";
     return [
       {
         source: "/py-api/:path*",

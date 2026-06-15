@@ -53,9 +53,8 @@ export default function GraphModule({ data }: { data: GraphData }) {
         setAtRiskNodes(connected);
     }, [selectedNode, memoData.links]);
 
-    // Custom node rendering for futuristic look with risk highlighting
+    // Custom node rendering — no per-frame gradient allocation
     const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-        // Guard: Skip if node position not yet computed by physics
         if (node.x === undefined || node.y === undefined || !isFinite(node.x) || !isFinite(node.y)) {
             return;
         }
@@ -64,56 +63,45 @@ export default function GraphModule({ data }: { data: GraphData }) {
         const fontSize = 12 / globalScale;
         const nodeSize = node.val || 8;
 
-        // Determine color based on return and risk status
-        let color = "#00F0FF"; // Default cyan
-        if (node.return > 0.005) color = "#33FF57"; // Green for positive
-        if (node.return < -0.005) color = "#FF3333"; // Red for negative
+        let color = "#00F0FF";
+        if (node.return > 0.005) color = "#33FF57";
+        if (node.return < -0.005) color = "#FF3333";
 
-        // Risk contagion highlighting
         const isSelected = node.id === selectedNode;
         const isAtRisk = atRiskNodes.has(node.id);
 
         if (isSelected) {
-            color = "#FFD700"; // Gold for selected node
+            color = "#FFD700";
         } else if (isAtRisk) {
-            color = "#FF6B6B"; // Pulsing red for at-risk nodes
+            color = "#FF6B6B";
         }
 
-        // Glow effect
-        const glowSize = isSelected || isAtRisk ? nodeSize * 3 : nodeSize * 2;
-        const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, glowSize);
-
-        gradient.addColorStop(0, color);
-        gradient.addColorStop(0.5, color + "66");
-        gradient.addColorStop(1, "transparent");
-
-        // Draw glow
+        // Lightweight glow — single semi-transparent circle instead of RadialGradient
+        const glowSize = isSelected || isAtRisk ? nodeSize * 2.5 : nodeSize * 1.8;
         ctx.beginPath();
         ctx.arc(node.x, node.y, glowSize, 0, 2 * Math.PI);
-        ctx.fillStyle = gradient;
+        ctx.fillStyle = color + "22";
         ctx.fill();
 
-        // Draw node core
+        // Node core
         ctx.beginPath();
         ctx.arc(node.x, node.y, nodeSize, 0, 2 * Math.PI);
         ctx.fillStyle = color;
         ctx.fill();
 
-        // Border - thicker for selected/at-risk
         ctx.strokeStyle = isSelected ? "#FFD700" : (isAtRisk ? "#FF0000" : "#fff");
         ctx.lineWidth = isSelected || isAtRisk ? 2 : 0.5;
         ctx.stroke();
 
-        // Draw label
-        ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
+        // Label
+        ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#fff';
         ctx.fillText(label, node.x, node.y + nodeSize + fontSize);
 
-        // Draw "AT RISK" label for affected nodes
         if (isAtRisk) {
-            ctx.font = `bold ${fontSize * 0.7}px 'JetBrains Mono', monospace`;
+            ctx.font = `bold ${fontSize * 0.7}px sans-serif`;
             ctx.fillStyle = '#FF6B6B';
             ctx.fillText("AT RISK", node.x, node.y - nodeSize - fontSize * 0.5);
         }
@@ -143,19 +131,19 @@ export default function GraphModule({ data }: { data: GraphData }) {
     return (
         <div className="neo-card h-[450px] relative overflow-hidden flex flex-col">
             <div className="absolute top-3 left-4 z-10 pointer-events-none">
-                <h3 className="text-secondary border-b border-border pb-1 mb-1 font-semibold tracking-wider">GL-STN SYSTEMIC RISK MAP</h3>
+                <h3 className="text-secondary border-b border-border pb-1 mb-1 font-semibold tracking-wider text-xs">CORRELATION NETWORK</h3>
                 <p className="text-textDim text-xs">
-                    Dynamic Topology // {data.nodes.length} Assets // {data.edges.length} Correlations
-                    {selectedNode && <span className="text-yellow-400 ml-2">// SELECTED: {selectedNode}</span>}
+                    {data.nodes.length} assets · {data.edges.length} correlations
+                    {selectedNode && <span className="text-yellow-400 ml-2">· {selectedNode} selected</span>}
                 </p>
             </div>
 
             {/* Risk Legend - pinned to far right, vertically centered to avoid header overlap */}
             {selectedNode && atRiskNodes.size > 0 && (
                 <div className="absolute top-1/2 right-4 -translate-y-1/2 transform z-10 bg-black/80 border border-red-500/50 rounded px-3 py-2 max-w-xs">
-                    <p className="text-red-400 text-xs font-bold mb-1">⚠ CONTAGION RISK</p>
+                    <p className="text-red-400 text-xs font-bold mb-1">Correlated Assets</p>
                     <p className="text-xs text-gray-300">
-                        If <span className="text-yellow-400">{selectedNode}</span> fails:
+                        Moves with <span className="text-yellow-400">{selectedNode}</span>:
                     </p>
                     <p className="text-xs text-red-400 font-mono mt-1">
                         {Array.from(atRiskNodes).join(", ")}
@@ -195,15 +183,11 @@ export default function GraphModule({ data }: { data: GraphData }) {
                             }
                             return 2;
                         }}
-                        linkDirectionalParticles={2}
-                        linkDirectionalParticleSpeed={0.005}
-                        linkDirectionalParticleWidth={2}
-                        linkDirectionalParticleColor={() => "#00F0FF"}
                         backgroundColor="transparent"
-                        d3AlphaDecay={0.02}
+                        d3AlphaDecay={0.05}
                         d3VelocityDecay={0.4}
-                        warmupTicks={100}
-                        cooldownTicks={200}
+                        warmupTicks={20}
+                        cooldownTicks={80}
                         enableNodeDrag={true}
                         enableZoomInteraction={true}
                         enablePanInteraction={true}

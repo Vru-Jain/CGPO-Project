@@ -127,7 +127,7 @@ export default function ComparisonChart({
     };
 
     return (
-        <Card>
+        <Card className="card-glow hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
             <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row justify-between">
                 <div className="grid flex-1 gap-1 text-center sm:text-left">
                     <CardTitle>Market Benchmark</CardTitle>

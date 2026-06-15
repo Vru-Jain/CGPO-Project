@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque } from "next/font/google";
+import { Bricolage_Grotesque, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
   variable: "--font-bricolage",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "600"],
+  variable: "--font-mono",
   display: "swap",
 });
 
@@ -18,8 +25,6 @@ export const metadata: Metadata = {
   },
 };
 
-import { BackendProvider } from "@/components/backend-connection-manager";
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,10 +32,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${bricolage.variable} font-sans antialiased`}>
-        <BackendProvider>
-          {children}
-        </BackendProvider>
+      <body className={`${bricolage.variable} ${ibmPlexMono.variable} font-sans antialiased`}>
+        {children}
       </body>
     </html>
   );

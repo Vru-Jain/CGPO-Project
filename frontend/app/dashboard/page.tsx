@@ -1,16 +1,27 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useBackend } from "@/components/backend-connection-manager";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Activity } from "lucide-react";
 import GraphModule from "@/components/GraphModule";
-import ComparisonChart from "@/components/ComparisonChart";
 import MetricsPanel from "@/components/MetricsPanel";
-import ExecutionLog from "@/components/ExecutionLog";
 import Sidebar from "@/components/Sidebar";
-import TickerModal from "@/components/TickerModal";
-import TutorialModal from "@/components/TutorialModal";
-import AgentInsights from "@/components/AgentInsights";
+
+const ComparisonChart = dynamic(() => import("@/components/ComparisonChart"), {
+  ssr: false,
+  loading: () => <div className="h-full rounded-xl border bg-card flex items-center justify-center text-sm text-muted-foreground">Loading chart...</div>,
+});
+const ExecutionLog = dynamic(() => import("@/components/ExecutionLog"), {
+  ssr: false,
+  loading: () => <div className="h-full rounded-xl border bg-card flex items-center justify-center text-sm text-muted-foreground">Loading logs...</div>,
+});
+const AgentInsights = dynamic(() => import("@/components/AgentInsights"), {
+  ssr: false,
+  loading: () => <div className="h-full rounded-xl border bg-card flex items-center justify-center text-sm text-muted-foreground">Loading insights...</div>,
+});
+const TickerModal = dynamic(() => import("@/components/TickerModal"), { ssr: false });
+const TutorialModal = dynamic(() => import("@/components/TutorialModal"), { ssr: false });
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -141,7 +152,10 @@ export default function Dashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      if (!infRes.ok) throw new Error("Backend connection failed");
+      if (!infRes.ok) {
+        const body = await infRes.json().catch(() => null);
+        throw new Error(body?.detail || `Inference failed (${infRes.status})`);
+      }
       const json = await infRes.json();
       setData(json);
       if (json.metrics) checkAchievement(json.metrics);
@@ -297,7 +311,7 @@ export default function Dashboard() {
           </AlertDialog>
 
           {/* Error Banner */}
-          {error && (
+          {error && !isConnected && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
@@ -314,10 +328,13 @@ export default function Dashboard() {
 
             {/* Left Column: Graph + Logs (7 cols on xl, full on md, full on mobile) */}
             <div className="md:col-span-2 xl:col-span-7 space-y-4 md:space-y-6">
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden card-glow hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                    </span>
                     Neural Asset Graph
                   </CardTitle>
                 </CardHeader>
@@ -325,7 +342,10 @@ export default function Dashboard() {
                   {data ? (
                     <GraphModule data={data.graph} />
                   ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
+                      </div>
                       Initializing Neural Assets...
                     </div>
                   )}
@@ -351,38 +371,50 @@ export default function Dashboard() {
               </div>
 
               {/* Signal Intelligence */}
-              <Card className="h-[340px] flex flex-col">
+              <Card className="h-[340px] flex flex-col card-glow hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium">Signal Intelligence</CardTitle>
-                    <Badge variant="outline" className="text-xs animate-pulse">Live</Badge>
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                      Signal Intelligence
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                      <span className="relative flex h-1.5 w-1.5 mr-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
+                      </span>
+                      Live
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden">
                   <ScrollArea className="h-full pr-4">
                     {news.length === 0 ? (
-                      <div className="text-muted-foreground text-sm italic text-center py-8">
-                        Waiting for intelligence stream...
+                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2 py-8">
+                        <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center">
+                          <Activity className="h-4 w-4 text-muted-foreground/50" />
+                        </div>
+                        <span className="italic">Waiting for intelligence stream...</span>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2.5">
                         {news.map((item, i) => {
                           const style = getSentimentStyle(item.sent);
                           return (
                             <div
                               key={`${item.ts}-${item.src}-${i}`}
-                              className={`p-3 rounded-lg border transition-colors hover:bg-accent/50 ${item.sent === "POS" ? "border-green-500/20" :
-                                item.sent === "NEG" ? "border-red-500/20" : "border-border"
+                              className={`p-3 rounded-lg border transition-all duration-200 hover:bg-accent/50 hover:-translate-y-px ${item.sent === "POS" ? "border-green-500/20" :
+                                item.sent === "NEG" ? "border-red-500/20" : "border-border/50"
                                 }`}
                             >
                               <div className="flex justify-between items-start mb-1.5">
                                 <span className="font-medium text-sm">{item.src}</span>
-                                <Badge variant={style.variant} className={style.className}>{item.sent}</Badge>
+                                <Badge variant={style.variant} className={`text-[10px] ${style.className}`}>{item.sent}</Badge>
                               </div>
                               <p className="text-sm text-muted-foreground line-clamp-2">
                                 {item.msg || item.title}
                               </p>
-                              <span className="text-xs text-muted-foreground/60 mt-1.5 block">{item.ts}</span>
+                              <span className="text-[10px] text-muted-foreground/50 mt-1.5 block font-mono">{item.ts}</span>
                             </div>
                           );
                         })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Sparkles, Info } from "lucide-react";
+import { TrendingUp, TrendingDown, Sparkles, Info, GraduationCap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AgentInsightsData } from "@/hooks/useAgentInsights";
 
@@ -79,7 +79,7 @@ function InsightRow({
 
 export default function AgentInsights({ data, loading }: AgentInsightsProps) {
     return (
-        <Card className="h-full flex flex-col">
+        <Card className="h-full flex flex-col card-glow hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
             <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -101,6 +101,18 @@ export default function AgentInsights({ data, loading }: AgentInsightsProps) {
                     </div>
                 ) : (
                     <>
+                        {data.isUntrained && (
+                            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-xs">
+                                <GraduationCap className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-medium text-amber-400">Agent is untrained</p>
+                                    <p className="text-muted-foreground mt-0.5">
+                                        Weights are equal across all assets. Click <strong>Train Agent</strong> to learn differentiated allocations.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Top Picks */}
                         <div>
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">

@@ -57,7 +57,7 @@ export default function ExecutionLog() {
         };
 
         fetchLogs();
-        const interval = setInterval(fetchLogs, 5000);
+        const interval = setInterval(fetchLogs, 15000);
 
         return () => {
             cancelled = true;
@@ -72,7 +72,7 @@ export default function ExecutionLog() {
     }, [logs]);
 
     return (
-        <Card className="h-full flex flex-col">
+        <Card className="h-full flex flex-col card-glow hover:shadow-lg hover:shadow-primary/5 transition-all duration-300">
             <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
