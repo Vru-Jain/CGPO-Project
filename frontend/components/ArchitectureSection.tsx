@@ -1,0 +1,72 @@
+"use client";
+import { useRef } from "react";
+import { Globe, Cpu, TrendingUp, ArrowRight } from "lucide-react";
+import { AnimatedBeam } from "@/components/ui/animated-beam";
+
+export function ArchitectureSection() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const vercelRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const yfinanceRef = useRef<HTMLDivElement>(null);
+
+  const tiers = [
+    { label: "Vercel", sub: "Next.js Frontend", icon: <Globe className="h-5 w-5" />, ref: vercelRef },
+    { label: "Modal GPU", sub: "FastAPI + PyTorch", icon: <Cpu className="h-5 w-5" />, ref: modalRef },
+    { label: "yfinance", sub: "Live Market Data", icon: <TrendingUp className="h-5 w-5" />, ref: yfinanceRef },
+  ];
+
+  return (
+    <div ref={containerRef} className="relative grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Animated beams between cards — desktop only */}
+      <AnimatedBeam
+        containerRef={containerRef}
+        fromRef={vercelRef}
+        toRef={modalRef}
+        duration={3.5}
+        delay={0}
+        className="hidden sm:block"
+      />
+      <AnimatedBeam
+        containerRef={containerRef}
+        fromRef={modalRef}
+        toRef={yfinanceRef}
+        duration={3.5}
+        delay={1.75}
+        className="hidden sm:block"
+      />
+      {/* Reverse beams (feedback loop) */}
+      <AnimatedBeam
+        containerRef={containerRef}
+        fromRef={yfinanceRef}
+        toRef={modalRef}
+        reverse
+        duration={3.5}
+        delay={0.5}
+        gradientStartColor="hsl(217, 91%, 75%)"
+        gradientStopColor="hsl(217, 91%, 60%)"
+        pathOpacity={0.06}
+        className="hidden sm:block"
+      />
+
+      {tiers.map((tier, i) => (
+        <div key={tier.label} className="relative">
+          <div
+            ref={tier.ref}
+            className="p-6 rounded-2xl border border-border/40 bg-card/40 hover:bg-card/70 hover:border-primary/25 transition-all duration-300 hover:-translate-y-1"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl mb-4 bg-primary/10 text-primary">
+              {tier.icon}
+            </div>
+            <p className="font-semibold text-sm">{tier.label}</p>
+            <p className="text-xs text-muted-foreground mt-1">{tier.sub}</p>
+          </div>
+          {i < 2 && (
+            <div className="hidden sm:flex absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
+              <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}

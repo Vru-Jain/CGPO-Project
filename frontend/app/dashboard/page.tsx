@@ -99,6 +99,7 @@ export default function Dashboard() {
   const [data, setData] = useState<InferenceData | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [gpuWarmingUp, setGpuWarmingUp] = useState(false);
   const [training, setTraining] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(null);
   const [error, setError] = useState("");
@@ -114,6 +115,8 @@ export default function Dashboard() {
 
   const loadingRef = useRef(loading);
   const trainingRef = useRef(training);
+  const abortRef = useRef<AbortController | null>(null);
+  const benchmarkCacheRef = useRef<{ ts: number; avgReturn: number } | null>(null);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
   useEffect(() => { trainingRef.current = training; }, [training]);
 
@@ -125,32 +128,47 @@ export default function Dashboard() {
     return `${base}${endpoint}`;
   };
 
-  // ── Check if agent beats market ─────────────────────────────────────────
+  // ── Check if agent beats market — result cached for 5 min ───────────────
   const checkAchievement = useCallback(async (metrics: Metrics) => {
     try {
-      const res = await apiFetch(getApiUrl("/market/benchmark?period=3mo"));
-      if (!res.ok) return;
-      const json = await res.json();
-      const benchmarks: Record<string, { total_return: number }> = json.benchmarks || {};
-      // Average the US benchmarks as the reference
-      const vals = Object.values(benchmarks).map((b) => b.total_return).filter(Boolean);
-      if (vals.length === 0) return;
-      const avgBenchReturn = vals.reduce((a, b) => a + b, 0) / vals.length;
-      if (metrics.expected_return > avgBenchReturn) {
-        setShowAchievement(true);
+      const now = Date.now();
+      let avgBenchReturn: number;
+      if (benchmarkCacheRef.current && now - benchmarkCacheRef.current.ts < 5 * 60 * 1000) {
+        avgBenchReturn = benchmarkCacheRef.current.avgReturn;
+      } else {
+        const res = await apiFetch(getApiUrl("/market/benchmark?period=3mo"));
+        if (!res.ok) return;
+        const json = await res.json();
+        const benchmarks: Record<string, { total_return: number }> = json.benchmarks || {};
+        const vals = Object.values(benchmarks).map((b) => b.total_return).filter(Boolean);
+        if (vals.length === 0) return;
+        avgBenchReturn = vals.reduce((a, b) => a + b, 0) / vals.length;
+        benchmarkCacheRef.current = { ts: now, avgReturn: avgBenchReturn };
       }
+      if (metrics.expected_return > avgBenchReturn) setShowAchievement(true);
     } catch {
       // silent — achievement check is non-critical
     }
-  }, [backendUrl]);
+  }, [backendUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchInference = async () => {
+  const fetchInference = useCallback(async () => {
+    // Cancel any in-flight inference request
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     setLoading(true);
+    setGpuWarmingUp(false);
     setError("");
+
+    // After 6s with no response, show GPU warm-up notice
+    const warmupTimer = setTimeout(() => setGpuWarmingUp(true), 6000);
+
     try {
       const infRes = await apiFetch(getApiUrl("/ai/inference"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: ctrl.signal,
       });
       if (!infRes.ok) {
         const body = await infRes.json().catch(() => null);
@@ -160,11 +178,13 @@ export default function Dashboard() {
       setData(json);
       if (json.metrics) checkAchievement(json.metrics);
     } catch (err: any) {
-      setError(err.message);
+      if (err.name !== "AbortError") setError(err.message);
     } finally {
+      clearTimeout(warmupTimer);
+      setGpuWarmingUp(false);
       setLoading(false);
     }
-  };
+  }, [backendUrl, checkAchievement]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTrainConfirmed = async () => {
     setTraining(true);
@@ -245,11 +265,19 @@ export default function Dashboard() {
     fetchInference();
     fetchNews();
     const inferenceTimer = setInterval(() => {
-      if (!loadingRef.current && !trainingRef.current) fetchInference();
+      if (!loadingRef.current && !trainingRef.current && document.visibilityState === "visible") {
+        fetchInference();
+      }
     }, 120000);
-    const newsTimer = setInterval(fetchNews, 30000);
-    return () => { clearInterval(inferenceTimer); clearInterval(newsTimer); };
-  }, []);
+    const newsTimer = setInterval(() => {
+      if (document.visibilityState === "visible") fetchNews();
+    }, 30000);
+    return () => {
+      clearInterval(inferenceTimer);
+      clearInterval(newsTimer);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [fetchInference]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getSentimentStyle = (sent: string) => {
     switch (sent) {
@@ -309,6 +337,17 @@ export default function Dashboard() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* GPU cold-start notice */}
+          {gpuWarmingUp && (
+            <Alert className="border-primary/30 bg-primary/5">
+              <Activity className="h-4 w-4 text-primary" />
+              <AlertDescription className="text-sm">
+                <span className="font-medium text-primary">Waking up GPU container</span>
+                <span className="text-muted-foreground"> — Modal serverless cold start typically takes 20–40 s. Inference will run automatically when ready.</span>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Error Banner */}
           {error && !isConnected && (

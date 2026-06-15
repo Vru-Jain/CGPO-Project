@@ -7,10 +7,12 @@ import {
   ArrowRight,
   Globe,
   Shield,
-  Cpu,
   Github,
   Activity,
 } from "lucide-react";
+import { Spotlight } from "@/components/ui/spotlight";
+import { AnimatedHeroGraph } from "@/components/AnimatedHeroGraph";
+import { ArchitectureSection } from "@/components/ArchitectureSection";
 
 function MiniGraph() {
   const blue = "hsl(217, 91%, 60%)";
@@ -47,43 +49,12 @@ function MiniGraph() {
   );
 }
 
-function NetworkGraph() {
-  const blue = "hsl(217, 91%, 60%)";
-  return (
-    <div className="relative w-full max-w-[380px] aspect-square select-none pointer-events-none">
-      <svg viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full" aria-hidden="true">
-        <defs>
-          <radialGradient id="cg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={blue} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={blue} stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <circle cx="160" cy="160" r="64" fill="url(#cg)" />
-        {([[160,160,55,55],[160,160,265,55],[160,160,55,265],[160,160,265,265],
-           [160,160,160,28],[160,160,292,160],[160,160,160,292],[160,160,28,160]] as number[][]).map(([x1,y1,x2,y2],i) => (
-          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={blue} strokeOpacity="0.2" strokeWidth="1" />
-        ))}
-        {([[55,55,160,28],[265,55,160,28],[55,55,28,160],[55,265,28,160],
-           [265,55,292,160],[265,265,292,160],[55,265,160,292],[265,265,160,292],
-           [55,55,265,55],[55,265,265,265]] as number[][]).map(([x1,y1,x2,y2],i) => (
-          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={blue} strokeOpacity="0.07" strokeWidth="0.75" />
-        ))}
-        {([[160,28],[292,160],[160,292],[28,160]] as number[][]).map(([cx,cy],i) => (
-          <circle key={i} cx={cx} cy={cy} r="4" fill={blue} fillOpacity="0.4" stroke={blue} strokeOpacity="0.55" strokeWidth="1" />
-        ))}
-        {([[55,55],[265,55],[55,265],[265,265]] as number[][]).map(([cx,cy],i) => (
-          <circle key={i} cx={cx} cy={cy} r="7" fill={blue} fillOpacity="0.12" stroke={blue} strokeOpacity="0.3" strokeWidth="1.5" />
-        ))}
-        <circle cx="160" cy="160" r="22" fill="none" stroke={blue} strokeOpacity="0.25" strokeWidth="1" strokeDasharray="4 5" />
-        <circle cx="160" cy="160" r="13" fill={blue} fillOpacity="0.9" />
-      </svg>
-    </div>
-  );
-}
-
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+
+      {/* Cursor spotlight — client component, fixed to viewport */}
+      <Spotlight />
 
       {/* Nav */}
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
@@ -119,6 +90,7 @@ export default function LandingPage() {
           style={{ background: "radial-gradient(ellipse 55% 65% at 15% 55%, hsl(217 91% 60% / 0.09), transparent 65%)" }}
         />
         <div className="relative max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center py-20 lg:py-0">
+          {/* Left: content */}
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-primary mb-8 animate-fade-in-up">
               <span className="relative flex h-1.5 w-1.5">
@@ -132,10 +104,41 @@ export default function LandingPage() {
               <br />
               <span className="text-primary">Portfolio Optimizer</span>
             </h1>
-            <p className="text-base text-muted-foreground leading-relaxed mb-10 max-w-sm animate-fade-in-up delay-200">
+            <p className="text-base text-muted-foreground leading-relaxed mb-8 max-w-sm animate-fade-in-up delay-200">
               GNN and RL agent that builds, optimises, and benchmarks portfolios against global indices in real-time.
             </p>
-            <div className="flex flex-wrap items-center gap-3 animate-fade-in-up delay-300">
+
+            {/* Terminal output strip */}
+            <div className="mb-10 animate-fade-in-up delay-300">
+              <div className="rounded-lg border border-border/40 bg-card/50 overflow-hidden w-fit max-w-sm">
+                <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/30 bg-card/60">
+                  <span className="h-2 w-2 rounded-full bg-red-500/50" />
+                  <span className="h-2 w-2 rounded-full bg-yellow-500/50" />
+                  <span className="h-2 w-2 rounded-full bg-green-500/50" />
+                  <span className="ml-2 text-[10px] text-muted-foreground/50" style={{ fontFamily: "var(--font-mono)" }}>
+                    evaluate_blackbook.py
+                  </span>
+                </div>
+                <div className="px-4 py-3 space-y-1" style={{ fontFamily: "var(--font-mono)" }}>
+                  <p className="text-[11px] text-muted-foreground/60">
+                    <span className="text-primary/60">$</span> python evaluate_blackbook.py
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/50">
+                    &gt;&gt;&gt; Loading GNN weights... <span className="text-green-500/70">OK</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/50">
+                    &gt;&gt;&gt; Evaluating 104 trading days...
+                  </p>
+                  <p className="text-[11px] text-foreground/80">
+                    Sharpe <span className="text-primary">1.34</span>
+                    {" · "}MaxDD <span className="text-muted-foreground">−15.7%</span>
+                    {" · "}Return <span className="text-primary">+17.2%</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 animate-fade-in-up delay-400">
               <Link
                 href="/dashboard"
                 className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 active:scale-[0.98]"
@@ -154,8 +157,10 @@ export default function LandingPage() {
               </a>
             </div>
           </div>
+
+          {/* Right: animated network graph */}
           <div className="hidden lg:flex items-center justify-center animate-fade-in-up delay-200">
-            <NetworkGraph />
+            <AnimatedHeroGraph />
           </div>
         </div>
         <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-background to-transparent pointer-events-none" />
@@ -169,7 +174,7 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
 
-            {/* GNN - wide, two-column inner layout with mini graph */}
+            {/* GNN — wide, two-column inner layout */}
             <div className="card-glow group lg:col-span-7 rounded-2xl border border-primary/20 bg-primary/[0.07] hover:bg-primary/[0.11] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/5">
               <div className="flex flex-col sm:flex-row h-full p-7 gap-6">
                 <div className="flex-1 min-w-0">
@@ -190,7 +195,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* RL - single primary tint */}
+            {/* RL */}
             <div className="card-glow group lg:col-span-5 p-7 rounded-2xl border border-primary/15 bg-primary/[0.04] hover:bg-primary/[0.09] transition-all duration-300 hover:-translate-y-1">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary mb-5 ring-1 ring-primary/20 group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
                 <Activity className="h-5 w-5" />
@@ -224,7 +229,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* GPU - neutral */}
+            {/* GPU */}
             <div className="card-glow group lg:col-span-6 p-6 rounded-2xl border border-border/40 bg-card/40 hover:bg-card/70 transition-all duration-300 hover:-translate-y-1">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4 ring-1 ring-primary/15 group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
                 <Zap className="h-5 w-5" />
@@ -257,28 +262,8 @@ export default function LandingPage() {
             <h2 className="text-2xl sm:text-3xl font-bold mb-2 [text-wrap:balance]">How It Works</h2>
             <p className="text-sm text-muted-foreground">Three-tier cloud stack. Zero always-on cost.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: "Vercel", sub: "Next.js Frontend", icon: <Globe className="h-5 w-5" /> },
-              { label: "Modal GPU", sub: "FastAPI + PyTorch", icon: <Cpu className="h-5 w-5" /> },
-              { label: "yfinance", sub: "Live Market Data", icon: <TrendingUp className="h-5 w-5" /> },
-            ].map((step, i) => (
-              <div key={step.label} className="relative">
-                <div className="p-6 rounded-2xl border border-border/40 bg-card/40 hover:bg-card/70 hover:border-primary/25 transition-all duration-300 hover:-translate-y-1">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl mb-4 bg-primary/10 text-primary">
-                    {step.icon}
-                  </div>
-                  <p className="font-semibold text-sm">{step.label}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{step.sub}</p>
-                </div>
-                {i < 2 && (
-                  <div className="hidden sm:flex absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
-                    <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {/* Client component — uses AnimatedBeam with refs */}
+          <ArchitectureSection />
         </div>
       </section>
 
