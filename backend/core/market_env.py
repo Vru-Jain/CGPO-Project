@@ -19,7 +19,13 @@ class MarketGraphEnv(gym.Env):
         self.window_size = window_size
         self.n_assets = len(tickers)
         self.benchmark = benchmark
-        
+
+        # Clean, ticker-aligned close prices used for the reward path. See
+        # _extract_close — without this the partial most-recent yfinance row
+        # injected a NaN on every episode's final step, poisoning the whole
+        # episode's normalized returns -> NaN loss -> every update skipped.
+        self.close = self._extract_close(data)
+
         # Fetch benchmark data for the same period
         self._load_benchmark()
         
@@ -35,15 +41,65 @@ class MarketGraphEnv(gym.Env):
         })
         
         self.graph_engine = GraphEngine(tickers)
-        
+
+        # Precompute every step's observation ONCE. The graph/features at step t
+        # depend only on the fixed price window ending at t, so they're identical
+        # across episodes — recomputing build_graph (~RSI/MACD/correlation) every
+        # step was the training bottleneck (~6s/episode) and pushed long runs
+        # past Modal's ~5-min container window, which recycled the container and
+        # killed training before it could save. Caching makes episodes ~10x
+        # faster so runs finish well inside the window.
+        self._obs_cache = {}
+        self._precompute_observations()
+
         self.current_step = window_size
         self.portfolio_value = 10000.0
         self.benchmark_value = 10000.0
         self.current_weights = np.ones(self.n_assets) / self.n_assets
-        
+
         # Track cumulative performance
         self.agent_returns = []
         self.benchmark_returns = []
+
+    def _precompute_observations(self):
+        """Build and cache the observation for every reachable step index."""
+        for t in range(self.window_size, len(self.data)):
+            window_data = self.data.iloc[t - self.window_size : t]
+            x, edge_index, edge_attr = self.graph_engine.build_graph(window_data, self.window_size)
+            self._obs_cache[t] = {
+                'x': x.cpu().numpy(),
+                'edge_index': edge_index.cpu().numpy(),
+                'edge_attr': edge_attr.cpu().numpy(),
+            }
+
+    def _extract_close(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Return a clean close-price DataFrame whose columns are in self.tickers
+        order. yfinance returns columns in its own order, and the reward path
+        does np.dot(weights, returns) where `weights` is in self.tickers order —
+        so we MUST reindex to align them. We also forward/back-fill, because the
+        most recent yfinance row is frequently a partial session (NaN for many
+        tickers); an unfilled NaN in an episode's final step poisons the whole
+        episode (NaN reward -> NaN normalized returns -> NaN loss -> skipped).
+        """
+        if isinstance(data.columns, pd.MultiIndex):
+            if 'Close' in data.columns.get_level_values(0):
+                close = data['Close']
+            elif 'Close' in data.columns.get_level_values(1):
+                close = data.xs('Close', level=1, axis=1)
+            else:
+                close = data
+        else:
+            close = data[['Close']] if 'Close' in data.columns else data
+
+        if isinstance(close, pd.Series):
+            close = close.to_frame()
+
+        # Align to the agent's ticker order (missing tickers become NaN columns,
+        # handled by the fill below) and clean residual gaps.
+        close = close.reindex(columns=self.tickers)
+        close = close.ffill().bfill()
+        return close
 
     def _load_benchmark(self):
         """
@@ -101,9 +157,13 @@ class MarketGraphEnv(gym.Env):
         return self._get_observation(), {}
 
     def _get_observation(self):
+        # Cached (see _precompute_observations); fall back to a live build for any
+        # step index outside the precomputed range.
+        cached = self._obs_cache.get(self.current_step)
+        if cached is not None:
+            return cached
         window_data = self.data.iloc[self.current_step - self.window_size : self.current_step]
         x, edge_index, edge_attr = self.graph_engine.build_graph(window_data, self.window_size)
-        
         return {
             'x': x.cpu().numpy(),
             'edge_index': edge_index.cpu().numpy(),
@@ -144,17 +204,16 @@ class MarketGraphEnv(gym.Env):
             
         self.current_weights = weights
         
-        # Get prices at t and t+1
-        if isinstance(self.data.columns, pd.MultiIndex):
-            prices_t = self.data.xs('Close', level=1, axis=1).iloc[self.current_step]
-            prices_t1 = self.data.xs('Close', level=1, axis=1).iloc[self.current_step + 1]
-        else:
-            prices_t = self.data['Close'].iloc[self.current_step]
-            prices_t1 = self.data['Close'].iloc[self.current_step + 1]
-            
-        # Asset returns
-        asset_returns = (prices_t1 - prices_t) / prices_t
-        asset_returns = asset_returns.values
+        # Get aligned, cleaned prices at t and t+1. self.close is reindexed to
+        # self.tickers order and ff/bf-filled, so returns line up with `weights`
+        # and a partial last session can't inject a NaN.
+        prices_t = self.close.iloc[self.current_step].values
+        prices_t1 = self.close.iloc[self.current_step + 1].values
+
+        # Asset returns, guarded against any residual NaN/inf (e.g. a zero price)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            asset_returns = (prices_t1 - prices_t) / prices_t
+        asset_returns = np.nan_to_num(asset_returns, nan=0.0, posinf=0.0, neginf=0.0)
         
         # Portfolio return
         port_return = np.dot(weights, asset_returns)
@@ -186,7 +245,12 @@ class MarketGraphEnv(gym.Env):
             recent_excess = np.mean(self.agent_returns[-5:]) - np.mean(self.benchmark_returns[-5:])
             if recent_excess > 0:
                 reward += recent_excess * 10  # Consistency bonus
-        
+
+        # Final safety net: never emit a non-finite reward (it would poison the
+        # episode's normalized returns and force the NaN-guard to skip the update).
+        if not np.isfinite(reward):
+            reward = 0.0
+
         # Advance time
         self.current_step += 1
         terminated = self.current_step >= len(self.data) - 1

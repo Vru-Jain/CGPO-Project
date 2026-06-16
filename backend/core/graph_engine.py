@@ -39,7 +39,14 @@ class GraphEngine:
                 close_prices = market_data.iloc[:, 0]
         else:
             close_prices = market_data['Close'] if 'Close' in market_data else market_data.iloc[:, 0]
-        
+
+        # Align columns to the agent's ticker order. yfinance returns columns in
+        # its own order, but the RSI loop below iterates self.tickers while the
+        # other features are taken via .values — without this reindex the feature
+        # rows (and the downstream action weights) map to the WRONG tickers.
+        if isinstance(close_prices, pd.DataFrame):
+            close_prices = close_prices.reindex(columns=self.tickers)
+
         # Make sure we have enough data
         if len(close_prices) < window_size:
             return (
@@ -77,6 +84,16 @@ class GraphEngine:
 
         # Stack features: [Returns, Volatility, Momentum, RSI]
         x = np.column_stack((returns, volatility, momentum, rsi_values))
+
+        # Cross-sectional standardization: z-score each feature ACROSS the assets
+        # so the network sees O(1), differentiated inputs. Raw returns/volatility
+        # are ~0.01 and nearly identical across correlated tech names, which made
+        # the per-asset signal ~100x too weak and collapsed the allocation to
+        # uniform. Standardizing turns each feature into "relative attractiveness".
+        mean = x.mean(axis=0, keepdims=True)
+        std = x.std(axis=0, keepdims=True)
+        x = (x - mean) / (std + 1e-6)
+
         x = torch.tensor(x, dtype=torch.float32, device=self.device)
         
         # 2. Compute Edges (Correlation with k-NN guarantee)

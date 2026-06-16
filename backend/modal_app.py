@@ -28,14 +28,18 @@ image = (
     gpu="T4",
     max_containers=1,
     min_containers=0,
+    # Allow long-lived containers so a background training run isn't recycled
+    # mid-flight (the default is 5 min). Training is now fast, but this is cheap
+    # insurance against the container being torn down before save_model().
+    timeout=1800,
     # Stay warm for 5 min after the last request so a user's session (and the
     # training-status polling loop) doesn't re-pay the cold start mid-use.
     scaledown_window=300,
-    # Snapshot the container after the slow torch + CUDA import so subsequent
-    # cold starts restore from memory instead of re-importing. GPU snapshotting
-    # is experimental and single-CUDA-GPU only (our GNN qualifies).
-    enable_memory_snapshot=True,
-    experimental_options={"enable_gpu_snapshot": True},
+    # NOTE: memory snapshots were tried here to cut cold start, but Modal
+    # checkpoints/recycles the container to capture the snapshot, which kills
+    # the long-running background TRAINING task (~6 min in) before it can save.
+    # The slim image + scaledown_window already cover cold start without that
+    # risk, so snapshotting stays off.
     secrets=[modal.Secret.from_name("cgpo-secrets")],
     volumes={"/models": model_volume},
     env={"CGPO_MODEL_DIR": "/models", "CGPO_MODEL_VOLUME": MODEL_VOLUME_NAME},

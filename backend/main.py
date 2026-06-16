@@ -138,7 +138,7 @@ class InferenceResponse(BaseModel):
 
 
 class TrainingRequest(BaseModel):
-    episodes: int = 200
+    episodes: int = 120
 
 
 # --- Helper to Init Resources ---

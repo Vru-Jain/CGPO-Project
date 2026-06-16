@@ -57,7 +57,7 @@ interface TrainingStatus { episode: number; total: number; reward: number; }
 // Episodes per training run. Higher = more converged, more differentiated
 // allocations (the agent actually learns instead of staying near-uniform).
 // Kept in sync with the backend TrainingRequest default.
-const TRAINING_EPISODES = 200;
+const TRAINING_EPISODES = 120;
 
 // ─── Presets ─────────────────────────────────────────────────────────────────
 

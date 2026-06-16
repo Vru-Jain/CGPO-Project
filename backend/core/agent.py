@@ -12,6 +12,12 @@ from core.models import GNNPolicy
 # locally it falls back to the repo-relative "models" directory.
 MODEL_DIR = os.getenv("CGPO_MODEL_DIR", "models")
 
+# Temperature for the deterministic inference readout (softmax of actor logits).
+# < 1 sharpens (more decisive allocation), > 1 flattens toward uniform. This only
+# affects the displayed/used allocation, not training, so it can be retuned and
+# redeployed without retraining the model.
+INFER_TEMPERATURE = 0.5
+
 
 class Agent:
     def __init__(self, num_features, num_assets, lr=0.001, gamma=0.99, entropy_coef=0.01):
@@ -47,9 +53,16 @@ class Agent:
         if training:
             action = dist.sample()
         else:
-            action = dist.mean # Deterministic
-            
-        log_prob = dist.log_prob(action)
+            # Deterministic readout: a temperature-sharpened softmax of the actor
+            # logits. This reflects the learned per-asset preferences far more
+            # decisively than the +1-floored Dirichlet mean, which compresses the
+            # allocation toward uniform.
+            action = F.softmax(logits / INFER_TEMPERATURE, dim=-1)
+
+        # Floor the action away from exact 0 before log_prob: a Dirichlet sample
+        # component can underflow to 0.0 in float32, making log_prob -inf -> NaN
+        # loss. The floor is a no-op for normal samples.
+        log_prob = dist.log_prob(action.clamp(min=1e-8))
         entropy = dist.entropy()
         
         return action.detach().cpu().numpy(), log_prob, value, entropy
@@ -141,10 +154,16 @@ class Agent:
     def load_model(self, path=None) -> bool:
         """Load trained weights. Returns True if a model was found and loaded."""
         path = path or os.path.join(MODEL_DIR, "agent.pth")
-        if os.path.exists(path):
+        if not os.path.exists(path):
+            print(f"No model found at {path}, starting from scratch.")
+            return False
+        try:
             self.policy.load_state_dict(torch.load(path, map_location=self.device))
-            self.policy.eval()
-            print(f"Model loaded from {path}")
-            return True
-        print(f"No model found at {path}, starting from scratch.")
-        return False
+        except Exception as e:
+            # e.g. a checkpoint from a previous architecture (shape mismatch).
+            # Treat as "no usable model" so we train fresh rather than crash.
+            print(f"Could not load model at {path} ({e}); starting from scratch.")
+            return False
+        self.policy.eval()
+        print(f"Model loaded from {path}")
+        return True
