@@ -42,8 +42,8 @@ export function ArchitectureSection() {
         reverse
         duration={3.5}
         delay={0.5}
-        gradientStartColor="hsl(217, 91%, 75%)"
-        gradientStopColor="hsl(217, 91%, 60%)"
+        gradientStartColor="#f8c060"
+        gradientStopColor="#f0a020"
         pathOpacity={0.06}
         className="hidden sm:block"
       />
@@ -52,13 +52,19 @@ export function ArchitectureSection() {
         <div key={tier.label} className="relative">
           <div
             ref={tier.ref}
-            className="p-6 rounded-2xl border border-border/40 bg-card/40 hover:bg-card/70 hover:border-primary/25 transition-all duration-300 hover:-translate-y-1"
+            className="p-6 rounded-2xl transition-all duration-300 hover:-translate-y-1"
+            style={{ border: "1px solid #1c1e20", background: "rgba(14,15,16,0.6)" }}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(240,160,32,0.25)")}
+            onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c1e20")}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl mb-4 bg-primary/10 text-primary">
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-xl mb-4"
+              style={{ background: "rgba(240,160,32,0.1)", color: "#f0a020" }}
+            >
               {tier.icon}
             </div>
-            <p className="font-semibold text-sm">{tier.label}</p>
-            <p className="text-xs text-muted-foreground mt-1">{tier.sub}</p>
+            <p className="font-semibold text-sm" style={{ color: "#e8e4d8" }}>{tier.label}</p>
+            <p className="text-xs mt-1" style={{ color: "#6b6758" }}>{tier.sub}</p>
           </div>
           {i < 2 && (
             <div className="hidden sm:flex absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">

@@ -124,7 +124,7 @@ CGPO-Project/
 │   ├── components/             # Header, Sidebar, charts, graph, metrics, logs
 │   ├── hooks/                  # useAgentInsights, market region, etc.
 │   ├── lib/api.ts              # Fetch wrapper (key injection, 15s timeout)
-│   └── middleware.ts           # Clerk route protection for /dashboard
+│   └── proxy.ts                # Clerk route protection for /dashboard
 ├── docs/                       # Deployment and design notes
 └── README.md
 ```
