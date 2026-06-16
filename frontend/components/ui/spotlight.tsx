@@ -7,7 +7,7 @@ export function Spotlight({ className = "" }: { className?: string }) {
   const mouseY = useMotionValue(-500);
   const springX = useSpring(mouseX, { stiffness: 50, damping: 20, restDelta: 0.001 });
   const springY = useSpring(mouseY, { stiffness: 50, damping: 20, restDelta: 0.001 });
-  const background = useMotionTemplate`radial-gradient(650px circle at ${springX}px ${springY}px, rgba(240,160,32,0.06), transparent 40%)`;
+  const background = useMotionTemplate`radial-gradient(650px circle at ${springX}px ${springY}px, rgba(59,123,255,0.06), transparent 40%)`;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => { mouseX.set(e.clientX); mouseY.set(e.clientY); };

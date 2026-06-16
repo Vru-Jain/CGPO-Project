@@ -42,8 +42,8 @@ export function ArchitectureSection() {
         reverse
         duration={3.5}
         delay={0.5}
-        gradientStartColor="#f8c060"
-        gradientStopColor="#f0a020"
+        gradientStartColor="#80aaff"
+        gradientStopColor="#3b7bff"
         pathOpacity={0.06}
         className="hidden sm:block"
       />
@@ -59,7 +59,7 @@ export function ArchitectureSection() {
           >
             <div
               className="flex h-10 w-10 items-center justify-center rounded-xl mb-4"
-              style={{ background: "rgba(240,160,32,0.1)", color: "#f0a020" }}
+              style={{ background: "rgba(59,123,255,0.1)", color: "#3b7bff" }}
             >
               {tier.icon}
             </div>

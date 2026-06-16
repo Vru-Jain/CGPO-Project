@@ -2,7 +2,7 @@
 import { motion } from "framer-motion";
 
 export function AnimatedHeroGraph() {
-  const blue = "#f0a020";
+  const blue = "#3b7bff";
 
   const mainEdges = [
     [160,160,55,55],[160,160,265,55],[160,160,55,265],[160,160,265,265],
