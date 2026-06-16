@@ -65,6 +65,10 @@ state = {
     "engine": None,
     "agent": None,
     "tickers": ["AAPL", "NVDA", "MSFT", "GOOG", "AMZN", "TSLA", "META", "AMD", "QCOM", "INTC"],  # Default
+    # Whether trained weights were loaded/produced (vs random init). Reported to
+    # the frontend so it can show real reasoning instead of guessing from the
+    # weight spread.
+    "model_trained": False,
     # Training Status
     "is_training": False,
     "training_episode": 0,
@@ -155,9 +159,9 @@ def get_or_init_resources(tickers: List[str] = None):
                 state["engine"] = GraphEngine(tickers, correlation_threshold=0.3)
                 state["agent"] = Agent(num_features=4, num_assets=len(tickers))
                 try:
-                    state["agent"].load_model()
+                    state["model_trained"] = state["agent"].load_model()
                 except Exception:
-                    pass
+                    state["model_trained"] = False
 
         if state["loader"] is None:
             tks = state["tickers"]
@@ -165,9 +169,9 @@ def get_or_init_resources(tickers: List[str] = None):
             state["engine"] = GraphEngine(tks, correlation_threshold=0.3)
             state["agent"] = Agent(num_features=4, num_assets=len(tks))
             try:
-                state["agent"].load_model()
+                state["model_trained"] = state["agent"].load_model()
             except Exception:
-                pass
+                state["model_trained"] = False
 
         loader = state["loader"]
         engine = state["engine"]
@@ -311,7 +315,8 @@ def run_inference():
                 "nodes": nodes,
                 "edges": edges
             },
-            "metrics": metrics
+            "metrics": metrics,
+            "trained": state["model_trained"],
         }
         
     except Exception as e:
@@ -413,6 +418,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
         commit_model_volume()
         with state_lock:
             state["is_training"] = False
+            state["model_trained"] = True
         add_log("SUCCESS", "Training complete — model saved")
         
     background_tasks.add_task(_train_task)

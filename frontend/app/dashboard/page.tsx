@@ -43,6 +43,7 @@ interface InferenceData {
   weights: Record<string, number>;
   graph: GraphData;
   metrics: Metrics;
+  trained?: boolean;
 }
 interface NewsItem {
   ts: string;
@@ -110,7 +111,7 @@ export default function Dashboard() {
 
   // Custom hooks
   const { showTutorial, tutorialStep, completeTutorial, replayTutorial, nextStep, prevStep } = useTutorial();
-  const agentInsights = useAgentInsights(data?.weights, data?.graph?.nodes);
+  const agentInsights = useAgentInsights(data?.weights, data?.graph?.nodes, data?.trained);
   const marketRegion = useMarketRegion(data?.tickers);
 
   const loadingRef = useRef(loading);

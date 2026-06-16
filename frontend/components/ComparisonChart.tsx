@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useBackend } from "@/components/backend-connection-manager";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,36 +70,63 @@ export default function ComparisonChart({
         }
     }, [marketRegion]);
 
-    const fetchBenchmark = useCallback(async () => {
-        setLoading(true);
-        setFetchError(null);
-        try {
-            // Encode the ticker properly (e.g. ^ values)
+    // Fetch with retry. The Modal backend scales to zero, so the FIRST request
+    // can take 20-40s to cold-start — longer than apiFetch's 15s timeout, which
+    // is why the benchmark "never loads on the first try". We retry a few times
+    // with backoff so a later attempt lands once the container is warm. A
+    // `cancelled` flag prevents a superseded request (period/index change or
+    // unmount) from writing stale state.
+    useEffect(() => {
+        let cancelled = false;
+
+        const run = async () => {
+            setLoading(true);
+            setFetchError(null);
+
             const tickerParam = encodeURIComponent(selectedBenchmark.value);
             const benchUrl = `${backendUrl.replace(/\/$/, "")}/market/benchmark?period=${period}&ticker=${tickerParam}`;
+            const MAX_ATTEMPTS = 4;
+            let lastError = "";
 
-            const res = await apiFetch(benchUrl);
-            if (res.ok) {
-                const data = await res.json();
-                if (!data.benchmarks || Object.keys(data.benchmarks).length === 0) {
-                    setFetchError("No data available for this index");
-                    setBenchmarkData(null);
-                } else {
-                    setBenchmarkData(data.benchmarks);
+            for (let attempt = 0; attempt < MAX_ATTEMPTS && !cancelled; attempt++) {
+                try {
+                    const res = await apiFetch(benchUrl); // 15s timeout per attempt
+                    if (cancelled) return;
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (cancelled) return;
+                        if (!data.benchmarks || Object.keys(data.benchmarks).length === 0) {
+                            lastError = "No data available for this index";
+                        } else {
+                            setBenchmarkData(data.benchmarks);
+                            setFetchError(null);
+                            setLoading(false);
+                            return;
+                        }
+                    } else {
+                        lastError = `Backend error: ${res.status}`;
+                    }
+                } catch {
+                    if (cancelled) return;
+                    lastError = "Connection failed"; // usually a cold-start timeout
                 }
-            } else {
-                setFetchError(`Backend error: ${res.status}`);
-            }
-        } catch (err) {
-            setFetchError(`Connection failed`);
-        } finally {
-            setLoading(false);
-        }
-    }, [period, selectedBenchmark]);
 
-    useEffect(() => {
-        fetchBenchmark();
-    }, [fetchBenchmark]);
+                // Back off before retrying (skip the wait after the final attempt).
+                if (attempt < MAX_ATTEMPTS - 1 && !cancelled) {
+                    await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+                }
+            }
+
+            if (!cancelled) {
+                setFetchError(lastError || "Failed to load benchmark");
+                setBenchmarkData(null);
+                setLoading(false);
+            }
+        };
+
+        run();
+        return () => { cancelled = true; };
+    }, [period, selectedBenchmark, backendUrl]);
 
     // Build chart data
     const chartData = (() => {

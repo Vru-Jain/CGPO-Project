@@ -236,12 +236,18 @@ class MarketDataLoader:
                 return cached
 
         print(f"Fetching benchmark data ({', '.join(benchmarks)}) for period={period}...")
-        
+
         current_period = period
         data = pd.DataFrame()
-        
-        # Try fetching, with fallback for weekends/holidays
-        for attempt in range(2):  # Max 2 attempts (original + fallback)
+
+        # yfinance is flaky on the FIRST call after a process/container cold
+        # start: it frequently throws or returns an empty frame while it
+        # establishes its session/cookies. Retry the same period a few times
+        # with backoff (this is the usual cause of "benchmark fails on the
+        # first try"), and additionally fall back to a longer period for
+        # short windows hit by a weekend/holiday.
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
                 data = yf.download(
                     benchmarks,
@@ -252,22 +258,24 @@ class MarketDataLoader:
                     progress=False,
                 )
             except Exception as e:
-                print(f"Download error: {e}")
-                return pd.DataFrame()
-            
+                print(f"[Benchmark] download attempt {attempt+1}/{max_attempts} failed: {e}")
+                data = pd.DataFrame()
+
             if not data.empty:
                 break  # Success
-            
-            # Try fallback period if available
+
+            # Use a longer fallback period if this short window came back empty.
             fallback = PERIOD_FALLBACKS.get(current_period)
             if fallback:
-                print(f"Empty data for '{current_period}', falling back to '{fallback}'...")
+                print(f"[Benchmark] empty for '{current_period}', falling back to '{fallback}'")
                 current_period = fallback
-            else:
-                break  # No more fallbacks
+
+            # Back off before the next attempt (skip the wait after the last one).
+            if attempt < max_attempts - 1:
+                time.sleep(1.0 * (attempt + 1))
 
         if data.empty:
-            print("Warning: Benchmark download returned empty data after fallback attempts.")
+            print("Warning: Benchmark download returned empty data after retries.")
             return pd.DataFrame()
 
         result: Dict[str, pd.Series] = {}

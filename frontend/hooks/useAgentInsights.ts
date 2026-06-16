@@ -25,7 +25,8 @@ export interface AgentInsightsData {
  */
 export function useAgentInsights(
     weights: Record<string, number> | undefined,
-    graphNodes: { id: string; return: number }[] | undefined
+    graphNodes: { id: string; return: number }[] | undefined,
+    trained?: boolean
 ): AgentInsightsData | null {
     return useMemo(() => {
         if (!weights || Object.keys(weights).length === 0) return null;
@@ -33,13 +34,12 @@ export function useAgentInsights(
         const entries = Object.entries(weights).sort((a, b) => b[1] - a[1]);
         const totalAssets = entries.length;
 
-        // Detect untrained: weights are essentially uniform (spread < 0.5%).
-        // A partially-trained but conservative agent can still shift weights by
-        // 1-2%, so the threshold is kept strict to avoid mislabelling it as
-        // "untrained" and hiding its real reasoning.
+        // Prefer the backend's authoritative `trained` flag (set when real
+        // weights were loaded or produced by training). Fall back to the weight-
+        // spread heuristic only when an older backend doesn't send the flag.
         const allWeights = entries.map(([, w]) => w);
         const spread = Math.max(...allWeights) - Math.min(...allWeights);
-        const isUntrained = spread < 0.005;
+        const isUntrained = trained !== undefined ? !trained : spread < 0.005;
 
         // Build a quick lookup for node-level returns
         const returnMap: Record<string, number> = {};
@@ -94,5 +94,5 @@ export function useAgentInsights(
             }));
 
         return { topPicks, reductions, totalAssets, isUntrained };
-    }, [weights, graphNodes]);
+    }, [weights, graphNodes, trained]);
 }

@@ -132,15 +132,19 @@ class Agent:
 
     def save_model(self, path=None):
         path = path or os.path.join(MODEL_DIR, "agent.pth")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        dir_name = os.path.dirname(path)
+        if dir_name:  # guard: os.makedirs("") raises for a bare filename
+            os.makedirs(dir_name, exist_ok=True)
         torch.save(self.policy.state_dict(), path)
         print(f"Model saved to {path}")
 
-    def load_model(self, path=None):
+    def load_model(self, path=None) -> bool:
+        """Load trained weights. Returns True if a model was found and loaded."""
         path = path or os.path.join(MODEL_DIR, "agent.pth")
         if os.path.exists(path):
             self.policy.load_state_dict(torch.load(path, map_location=self.device))
             self.policy.eval()
             print(f"Model loaded from {path}")
-        else:
-            print(f"No model found at {path}, starting from scratch.")
+            return True
+        print(f"No model found at {path}, starting from scratch.")
+        return False

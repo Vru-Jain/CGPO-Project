@@ -46,13 +46,44 @@ class MarketGraphEnv(gym.Env):
         self.benchmark_returns = []
 
     def _load_benchmark(self):
-        """Load benchmark returns aligned with data index."""
+        """
+        Load benchmark prices aligned to the TRAINING data's trading calendar.
+
+        Previously the benchmark was downloaded for a fixed period="1y" that did
+        not necessarily match the index of `self.data`. When the two calendars
+        disagreed (e.g. an India ticker universe vs SPY's NYSE calendar, or a
+        different date range), per-step date lookups in _get_benchmark_return
+        missed and returned 0.0 — so the agent was effectively rewarded on raw
+        return, not excess-over-benchmark. We now fetch the exact date range and
+        reindex onto self.data.index so every step has a benchmark price.
+        """
         try:
-            bench_data = yf.download(self.benchmark, period="1y", interval="1d", auto_adjust=True, progress=False)
+            start = self.data.index[0]
+            end = self.data.index[-1] + pd.Timedelta(days=1)  # yfinance end is exclusive
+            bench_data = yf.download(
+                self.benchmark, start=start, end=end,
+                interval="1d", auto_adjust=True, progress=False,
+            )
             if bench_data.empty:
                 raise ValueError(f"No benchmark data returned for {self.benchmark}")
-            self.benchmark_prices = bench_data['Close']
-            self.benchmark_daily_returns = bench_data['Close'].pct_change().fillna(0)
+
+            # Extract the Close series robustly (yfinance may return a MultiIndex
+            # even for a single ticker depending on version).
+            if isinstance(bench_data.columns, pd.MultiIndex):
+                if 'Close' in bench_data.columns.get_level_values(0):
+                    close = bench_data['Close']
+                else:
+                    close = bench_data.xs('Close', level=1, axis=1)
+                if isinstance(close, pd.DataFrame):
+                    close = close.iloc[:, 0]
+            else:
+                close = bench_data['Close']
+
+            # Align to the training calendar; forward-fill non-overlapping days
+            # so a benchmark price exists for every step the agent takes.
+            close = close.reindex(self.data.index, method='ffill')
+            self.benchmark_prices = close
+            self.benchmark_daily_returns = close.pct_change().fillna(0)
         except Exception as e:
             print(f"[Warning] Benchmark load failed for {self.benchmark}: {e}")
             self.benchmark_prices = None
@@ -81,23 +112,26 @@ class MarketGraphEnv(gym.Env):
 
     def _get_benchmark_return(self):
         """Get benchmark return for current step."""
-        if self.benchmark_returns is None:
+        # Guard on benchmark_prices (the Series) — benchmark_returns is the
+        # accumulated list and is never None, so checking it let a failed
+        # benchmark load fall through to an AttributeError below.
+        if self.benchmark_prices is None:
             return 0.0
-        
+
         try:
             # Align with data index
             current_date = self.data.index[self.current_step]
             next_date = self.data.index[self.current_step + 1]
-            
+
             if current_date in self.benchmark_prices.index and next_date in self.benchmark_prices.index:
                 price_t = self.benchmark_prices.loc[current_date]
                 price_t1 = self.benchmark_prices.loc[next_date]
                 # Ensure scalar return (handle Series case)
                 ret = (price_t1 - price_t) / price_t
                 return float(ret.iloc[0]) if hasattr(ret, 'iloc') else float(ret)
-        except (KeyError, IndexError, TypeError) as e:
-            pass  # Date not found in benchmark — return 0.0 below
-        
+        except (KeyError, IndexError, TypeError, AttributeError, ZeroDivisionError):
+            pass  # Date not found / bad price — return 0.0 below
+
         return 0.0
 
     def step(self, action):

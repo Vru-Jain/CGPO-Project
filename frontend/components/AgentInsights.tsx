@@ -107,7 +107,7 @@ export default function AgentInsights({ data, loading }: AgentInsightsProps) {
                                 <div>
                                     <p className="font-medium text-amber-400">Agent is untrained</p>
                                     <p className="text-muted-foreground mt-0.5">
-                                        Weights are equal across all assets. Click <strong>Train Agent</strong> to learn differentiated allocations.
+                                        These allocations come from untrained (random) weights. Click <strong>Train Agent</strong> to learn differentiated, return-driven allocations.
                                     </p>
                                 </div>
                             </div>
