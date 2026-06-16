@@ -54,6 +54,11 @@ interface NewsItem {
 }
 interface TrainingStatus { episode: number; total: number; reward: number; }
 
+// Episodes per training run. Higher = more converged, more differentiated
+// allocations (the agent actually learns instead of staying near-uniform).
+// Kept in sync with the backend TrainingRequest default.
+const TRAINING_EPISODES = 200;
+
 // ─── Presets ─────────────────────────────────────────────────────────────────
 
 const PRESETS = {
@@ -189,12 +194,12 @@ export default function Dashboard() {
 
   const handleTrainConfirmed = async () => {
     setTraining(true);
-    setTrainingStatus({ episode: 0, total: 50, reward: 0 });
+    setTrainingStatus({ episode: 0, total: TRAINING_EPISODES, reward: 0 });
     try {
       await apiFetch(getApiUrl("/ai/train"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ episodes: 50 })
+        body: JSON.stringify({ episodes: TRAINING_EPISODES })
       });
       pollTrainingStatus();
     } catch {
@@ -326,8 +331,9 @@ export default function Dashboard() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Train the AI Agent?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will run 50 training episodes on the cloud GPU in the background.
-                  Inference data will auto-refresh when training completes.
+                  This runs {TRAINING_EPISODES} training episodes on the cloud GPU in the
+                  background — a few minutes. Keep this tab open so progress keeps
+                  updating; inference data auto-refreshes when training completes.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
