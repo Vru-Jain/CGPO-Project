@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { UserButton } from "@clerk/nextjs";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -133,6 +134,11 @@ export default function Header({
                             {loading ? "Running..." : "Run Inference"}
                         </span>
                     </Button>
+
+                    {/* Account */}
+                    <div className="ml-1 flex items-center border-l pl-3">
+                        <UserButton />
+                    </div>
                 </div>
             </div>
         </header>
