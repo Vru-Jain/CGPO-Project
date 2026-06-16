@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import os
 import threading
 import time
+from collections import defaultdict, deque
 from datetime import datetime
 
 # Core Logic Imports
@@ -57,6 +58,49 @@ async def verify_api_key(request: Request, call_next) -> Response:
                 status_code=401,
                 media_type="application/json",
             )
+    return await call_next(request)
+
+# ── Rate Limiting (per-IP, in-memory) ──────────────────────────────────────────
+# The Modal URL is public, so the GPU endpoints are the main abuse/cost vector.
+# Throttle them per client IP. In-memory state is fine because max_containers=1
+# means a single long-lived container handles all traffic.
+RATE_LIMITS = {  # path -> (max_requests, window_seconds)
+    "/ai/train": (3, 3600),      # 3 GPU training runs / hour / IP
+    "/ai/inference": (60, 60),   # 60 inferences / minute / IP
+}
+_rate_lock = threading.Lock()
+_rate_hits: Dict[str, Dict[str, deque]] = defaultdict(lambda: defaultdict(deque))
+
+
+def _client_ip(request: Request) -> str:
+    # Behind Modal's proxy the real client is in X-Forwarded-For.
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next) -> Response:
+    limit = RATE_LIMITS.get(request.url.path)
+    if limit and request.method == "POST":
+        max_requests, window = limit
+        ip = _client_ip(request)
+        now = time.time()
+        with _rate_lock:
+            hits = _rate_hits[ip][request.url.path]
+            while hits and hits[0] <= now - window:
+                hits.popleft()
+            if len(hits) >= max_requests:
+                retry_after = int(hits[0] + window - now) + 1
+                return Response(
+                    content='{"detail":"Rate limit exceeded. Please slow down and try again later."}',
+                    status_code=429,
+                    media_type="application/json",
+                    # ACAO so the browser can read the 429 (CORS middleware is inner).
+                    headers={"Retry-After": str(retry_after), "Access-Control-Allow-Origin": "*"},
+                )
+            hits.append(now)
     return await call_next(request)
 
 # Global State (InMemory for prototype consistency)
