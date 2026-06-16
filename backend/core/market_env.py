@@ -29,15 +29,12 @@ class MarketGraphEnv(gym.Env):
         # Fetch benchmark data for the same period
         self._load_benchmark()
         
-        # Determine max steps
-        self.max_steps = len(data) - window_size - 1
-        
         # Action Space: Portfolio weights for each asset
         self.action_space = spaces.Box(low=0, high=1, shape=(self.n_assets,), dtype=np.float32)
         
         # Observation Space
         self.observation_space = spaces.Dict({
-            'x': spaces.Box(low=-np.inf, high=np.inf, shape=(self.n_assets, 3), dtype=np.float32),
+            'x': spaces.Box(low=-np.inf, high=np.inf, shape=(self.n_assets, 4), dtype=np.float32),
         })
         
         self.graph_engine = GraphEngine(tickers)
@@ -95,9 +92,18 @@ class MarketGraphEnv(gym.Env):
         if isinstance(close, pd.Series):
             close = close.to_frame()
 
-        # Align to the agent's ticker order (missing tickers become NaN columns,
-        # handled by the fill below) and clean residual gaps.
+        # A single-ticker frame comes back with a generic 'Close' column rather
+        # than the ticker name; rename so the reindex aligns instead of going
+        # all-NaN (which would zero every return for the whole run).
+        if len(self.tickers) == 1 and close.shape[1] == 1:
+            close.columns = [self.tickers[0]]
+
+        # Align to the agent's ticker order, then surface (don't silently zero)
+        # any ticker that had no data at all before filling residual gaps.
         close = close.reindex(columns=self.tickers)
+        missing = [t for t in self.tickers if close[t].isna().all()]
+        if missing:
+            print(f"[Warning] No price data for {missing}; they will contribute 0 return.")
         close = close.ffill().bfill()
         return close
 
@@ -135,9 +141,11 @@ class MarketGraphEnv(gym.Env):
             else:
                 close = bench_data['Close']
 
-            # Align to the training calendar; forward-fill non-overlapping days
-            # so a benchmark price exists for every step the agent takes.
-            close = close.reindex(self.data.index, method='ffill')
+            # Align to the training calendar; forward- AND back-fill so a finite
+            # benchmark price exists for every step, including leading dates that
+            # precede the benchmark's first available price (ffill alone leaves
+            # those NaN, which leaked NaN into the reward/benchmark value).
+            close = close.reindex(self.data.index).ffill().bfill()
             self.benchmark_prices = close
             self.benchmark_daily_returns = close.pct_change().fillna(0)
         except Exception as e:
@@ -188,7 +196,8 @@ class MarketGraphEnv(gym.Env):
                 price_t1 = self.benchmark_prices.loc[next_date]
                 # Ensure scalar return (handle Series case)
                 ret = (price_t1 - price_t) / price_t
-                return float(ret.iloc[0]) if hasattr(ret, 'iloc') else float(ret)
+                ret = float(ret.iloc[0]) if hasattr(ret, 'iloc') else float(ret)
+                return ret if np.isfinite(ret) else 0.0
         except (KeyError, IndexError, TypeError, AttributeError, ZeroDivisionError):
             pass  # Date not found / bad price — return 0.0 below
 

@@ -152,7 +152,7 @@ def get_or_init_resources(tickers: List[str] = None):
         if tickers:
             current_set = set(state["tickers"])
             new_set = set(tickers)
-            if current_set != new_set or state["loader"] is None:
+            if (current_set != new_set or state["loader"] is None) and not state["is_training"]:
                 print(f"Initializing AI for {len(tickers)} tickers...")
                 state["tickers"] = tickers
                 state["loader"] = MarketDataLoader(tickers)
@@ -194,7 +194,12 @@ def set_tickers(payload: TickerList):
     """Update the asset universe."""
     if not payload.tickers:
         raise HTTPException(status_code=400, detail="Ticker list cannot be empty")
-    
+
+    # Changing the universe mid-training would swap the agent out from under the
+    # running training task (shared singleton container). Reject instead.
+    if state["is_training"]:
+        raise HTTPException(status_code=409, detail="Cannot change tickers while training is in progress")
+
     # Re-initialise resources for the new universe.
     get_or_init_resources(payload.tickers)
     add_log("INFO", f"Updated tickers universe: {', '.join(payload.tickers)}")
@@ -271,14 +276,7 @@ def run_inference():
             if u < v: # Undirected assumption for visual cleanliness
                 edges.append({"source": state["tickers"][int(u)], "target": state["tickers"][int(v)]})
                 
-        # Node metadata (e.g. return for coloring)
-        nodes = []
-        for i, t in enumerate(state["tickers"]):
-            ret = float(obs['x'][i][0]) # Feature 0 is return
-            nodes.append({"id": t, "return": ret})
-            
-        # Metrics Calculation
-        # Extract close prices rapidly
+        # Extract close prices (used for both node returns and metrics).
         if isinstance(data.columns, pd.MultiIndex):
             if 'Close' in data.columns.get_level_values(0):
                 close_prices = data['Close']
@@ -288,11 +286,27 @@ def run_inference():
                 close_prices = data.iloc[:, 0]
         else:
             close_prices = data['Close'] if 'Close' in data else data.iloc[:, 0]
-        
+
         recent_returns = close_prices.pct_change().tail(20)
-        
-        # Portfolio expected return (annualized)
         mean_daily_returns = recent_returns.mean()
+
+        # Latest real daily return per ticker, for the frontend's node coloring
+        # and momentum copy. Read from actual prices, NOT obs['x']: node features
+        # are now cross-sectionally standardized (z-scores) and no longer
+        # represent raw returns.
+        latest_returns = close_prices.pct_change().iloc[-1] if len(close_prices) > 1 else None
+
+        # Node metadata (return used by the frontend for coloring / momentum copy)
+        nodes = []
+        for i, t in enumerate(state["tickers"]):
+            ret = 0.0
+            if latest_returns is not None and hasattr(latest_returns, "get"):
+                val = latest_returns.get(t)
+                if val is not None and np.isfinite(val):
+                    ret = float(val)
+            nodes.append({"id": t, "return": ret})
+
+        # Portfolio expected return (annualized)
         port_ret = sum(weights_dict.get(t, 0) * mean_daily_returns.get(t, 0) for t in weights_dict) * 252
         
         # Portfolio volatility (annualized) using covariance matrix for accurate diversification
@@ -342,6 +356,9 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
 
     add_log("INFO", f"Training requested for {payload.episodes} episodes")
     loader, _, agent = get_or_init_resources()
+    # Snapshot the universe at dispatch time so a concurrent change can't desync
+    # the env from the fetched data or from the agent being trained.
+    train_tickers = list(state["tickers"])
 
     # Fetch Data synchronously (could be slow, but safe)
     data = loader.fetch_history(period="1y")
@@ -350,7 +367,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
         device_name = "GPU: " + torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
         add_log("INFO", f"Training device: {device_name}")
         add_log("TRACE", "Background training loop started")
-        env = MarketGraphEnv(state["tickers"], data, window_size=20)
+        env = MarketGraphEnv(train_tickers, data, window_size=20)
         
         # Custom training loop with status updates
         agent.policy.train()
@@ -416,6 +433,7 @@ def train_agent(payload: TrainingRequest, background_tasks: BackgroundTasks):
         
         agent.save_model()
         commit_model_volume()
+        agent.policy.eval()  # restore eval so post-training inference is deterministic (no dropout)
         with state_lock:
             state["is_training"] = False
             state["model_trained"] = True

@@ -141,6 +141,7 @@ class Agent:
                 print(f"Episode {ep+1}: Total Reward: {total_reward:.4f}")
                 
                 
+        self.policy.eval()  # restore eval so post-training evaluation is deterministic (no dropout)
         return all_rewards
 
     def save_model(self, path=None):

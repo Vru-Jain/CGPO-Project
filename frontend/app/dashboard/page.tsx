@@ -332,7 +332,7 @@ export default function Dashboard() {
                 <AlertDialogTitle>Train the AI Agent?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This runs {TRAINING_EPISODES} training episodes on the cloud GPU in the
-                  background — a few minutes. Keep this tab open so progress keeps
+                  background (a few minutes). Keep this tab open so progress keeps
                   updating; inference data auto-refreshes when training completes.
                 </AlertDialogDescription>
               </AlertDialogHeader>

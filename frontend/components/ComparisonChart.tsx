@@ -114,6 +114,7 @@ export default function ComparisonChart({
                 // Back off before retrying (skip the wait after the final attempt).
                 if (attempt < MAX_ATTEMPTS - 1 && !cancelled) {
                     await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+                    if (cancelled) return; // a superseded run shouldn't keep retrying
                 }
             }
 

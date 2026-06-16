@@ -248,6 +248,7 @@ class MarketDataLoader:
         # short windows hit by a weekend/holiday.
         max_attempts = 3
         for attempt in range(max_attempts):
+            threw = False
             try:
                 data = yf.download(
                     benchmarks,
@@ -258,6 +259,7 @@ class MarketDataLoader:
                     progress=False,
                 )
             except Exception as e:
+                threw = True
                 print(f"[Benchmark] download attempt {attempt+1}/{max_attempts} failed: {e}")
                 data = pd.DataFrame()
 
@@ -269,6 +271,11 @@ class MarketDataLoader:
             if fallback:
                 print(f"[Benchmark] empty for '{current_period}', falling back to '{fallback}'")
                 current_period = fallback
+            elif not threw:
+                # A clean (non-exception) empty response with no fallback means the
+                # period is genuinely empty — retrying won't help. Retries exist to
+                # ride out cold-start flakiness, which surfaces as an exception.
+                break
 
             # Back off before the next attempt (skip the wait after the last one).
             if attempt < max_attempts - 1:
