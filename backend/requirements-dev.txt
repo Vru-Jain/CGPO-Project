@@ -1,0 +1,11 @@
+# Local development / deployment tooling — NOT installed into the Modal
+# container image (that uses requirements.txt). Install locally with:
+#   pip install -r backend/requirements-dev.txt
+#
+# Deploy the backend from the project root with:
+#   modal deploy backend/modal_app.py
+# On Windows, prefix with PYTHONUTF8=1 so Modal's progress emoji doesn't
+# crash the legacy cp1252 console:
+#   PYTHONUTF8=1 modal deploy backend/modal_app.py
+
+modal>=1.5.0

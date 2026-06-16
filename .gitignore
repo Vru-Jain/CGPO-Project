@@ -23,6 +23,7 @@ venv/
 *.log
 artifacts/
 .gemini/
+.impeccable/
 
 # --- FRONTEND ---
 node_modules/
