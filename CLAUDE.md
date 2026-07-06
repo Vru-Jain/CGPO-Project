@@ -1,7 +1,9 @@
 # CGPO — working notes for whoever's running this session
 
 README.md covers what the system does and how it's used — read that first.
-This file is about how to work in this repo, not what it does.
+The global `~/.claude/CLAUDE.md` playbook governs how to work (root-cause
+fixes, verification before claiming done, git discipline); this file only
+adds what's specific to this repo.
 
 ## Stack
 
@@ -30,18 +32,13 @@ This file is about how to work in this repo, not what it does.
   `X-API-Key` (`CGPO_API_KEY`). Treat every endpoint as public and reachable
   by anyone when reasoning about abuse, cost, or rate limits.
 
-## Conventions
+## Repo-specific conventions
 
-- Commit style from history: `type: short summary` (feat/fix/chore/perf/docs/
-  redesign), blank line, then a short "why" if it's not obvious from the diff.
-  Check `git log` if unsure of tone for a given change type.
 - Run `npx tsc --noEmit` in `frontend/` after any TypeScript change, before
-  committing.
-- Don't fold an unrelated uncommitted change into a commit for a different
-  task — stage specific files (`git add <files>`), confirm with `git status`
-  before committing.
-- If something can't be verified in the current environment (no browser tool,
-  no live endpoint), say so explicitly instead of claiming it works.
+  committing. There is no CI — this manual check is the only gate.
+- Pushing to `main` deploys the frontend immediately (Vercel). The backend
+  never deploys on push; it needs the manual Modal command above.
+- Commit types seen in history: feat/fix/chore/perf/docs/redesign.
 
 ## Landing page design history — don't regress silently
 
