@@ -145,6 +145,11 @@ def run_pipeline():
     print(">>> 1. Fetching Historical Market Data (Late 2025 Window)...")
     data = yf.download(TICKERS, start=START, end=END, interval="1d",
                        auto_adjust=True, progress=False)
+    # Defensive: ensure we got a DataFrame back
+    if data is None or (isinstance(data, pd.DataFrame) and data.empty):
+        print("Error: no market data returned by yfinance (None or empty)."
+              " Check TICKERS, network, or yfinance API changes.")
+        return
 
     # Align MultiIndex structure for market_env.py: 'Close' at level 1
     if isinstance(data.columns, pd.MultiIndex) and "Close" in data.columns.get_level_values(0):
