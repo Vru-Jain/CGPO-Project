@@ -76,9 +76,9 @@ export default function Sidebar(props: SidebarProps) {
     const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
         <div className="flex flex-col h-full overflow-hidden">
             {/* Header */}
-            <div className="p-4 border-b shrink-0">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+            <div className={`border-b shrink-0 ${collapsed ? "px-2 py-4" : "p-4"}`}>
+                <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "justify-between"}`}>
+                    <div className={`flex items-center ${collapsed ? "" : "gap-3"}`}>
                         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shrink-0">
                             <TrendingUp className="h-5 w-5 text-primary-foreground" />
                         </div>
@@ -97,6 +97,7 @@ export default function Sidebar(props: SidebarProps) {
                         <button
                             onClick={() => setCollapsed(c => !c)}
                             className="hidden md:flex text-muted-foreground hover:text-foreground p-1 rounded"
+                            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                         >
                             <Menu className="h-4 w-4" />
                         </button>
